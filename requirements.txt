@@ -1,0 +1,6 @@
+mutagen
+natsort
+pyrogram
+pillow
+tgcrypto
+uvloop

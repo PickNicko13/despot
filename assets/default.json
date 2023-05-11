@@ -1,0 +1,34 @@
+{
+	"version": "0.1",
+	"library_root": "~/Music",
+	"delete_removed": false,
+	"delete_updated": false,
+	"opus": {
+		"enabled": false,
+		"bitrate": 96,
+		"embed_cover": false,
+		"replaygain": {
+			"mode": "replaygain",
+			"clipping_policy": "none"
+		}
+	},
+	"required_data": [
+		"title",
+		"tracknumber",
+		"discnumber",
+		"artist",
+		"albumartist",
+		"date",
+		"album"
+	],
+	"wanted_data": [
+		"totaltracks",
+		"totaldiscs",
+		"replaygain_album_gain",
+		"replaygain_track_gain",
+		"replaygain_album_peak",
+		"replaygain_track_peak",
+		"genre",
+		"media"
+	]
+}
