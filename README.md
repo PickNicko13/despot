@@ -24,11 +24,12 @@ Save length in samples
 
 ## Database model
 ```
-update_time //last time the DB was updated
-statistics: {   //precomputed statistical data
+root                str     //path to library root directory
+update_time                 //last time the DB was updated
+statistics: {               //precomputed statistical data
     max_peak: {
-        track: float   //maximum value of compensated peak for track_gain
-        album: float   //maximum value of compensated peak for album_gain
+        track:      float   //maximum value of compensated peak for track_gain
+        album:      float   //maximum value of compensated peak for album_gain
     }
     track_counts: {
         total:      int
@@ -62,9 +63,49 @@ last_uploaded_track: {      //path to last uploaded tracks
     normal:         str
     opus:           str
 }
-tree: [
-    { //entry
-        name:       str     //filename
+releases: {
+    *path_N*: {
+        album:      str
+        tracks: {
+            *filename_N*: {
+                mtime:      float   //seconds since epoch to find modified files and directories
+                metadata:   {}
+                length:     int     //length in samples
+                depth:      int     //bit depth
+                rate:       int     //sampling rate
+                links: {            //links to uploaded messages in telegram
+                    normal: str     //without reencoding
+                    opus:   str     //encoded as opus
+                }
+            }
+        }
+        files: {
+            *filename_N*: {
+                mtime:      float   //seconds since epoch to find modified files and directories
+                links: {            //links to uploaded messages in telegram
+                    normal: str     //without reencoding
+                    opus:   str     //encoded as opus
+                }
+            }
+        }
+        images: {
+            *filename_N*: {
+                mtime:      float   //seconds since epoch to find modified files and directories
+                links: {            //links to uploaded messages in telegram
+                    normal: str     //without reencoding
+                    opus:   str     //encoded as opus
+                }
+            }
+        }
+        links: {            //links to uploaded messages in telegram
+            normal: str     //without reencoding
+            opus:   str     //encoded as opus
+        }
+    }
+}
+--------
+tree: {
+    *name*: { //entry
         type:       str     //type in a relevant manner
         mtime:      float   //seconds since epoch to find modified files and directories
         children:   []      //if dir
@@ -73,14 +114,28 @@ tree: [
         length:     int     //length in samples
         depth:      int     //bit depth
         rate:       int     //sampling rate
+        /END/ if music
+        /BEGIN/ if music OR dir
         links: {            //links to uploaded messages in telegram
             normal: str     //without reencoding
             opus:   str     //encoded as opus
         }
-        /END/ if music
+        /END/ if music OR dir
     }
-]
+}
 ```
+
+## History
+### 12-05-2023
+It was decided to replace recursive tree with a release-based storage
+This has several benefits:
+1) get rid of recursion (more predictability, no need to transfer lots of data through recursion)
+2) higher performance
+3) lower memory consumption
+4) smaller database size
+5) simpler database updates
+
+
 
 ## OFFTOP
 - [ ] get the target loudness that fits at least 95% of my music, but ideally >99.9%

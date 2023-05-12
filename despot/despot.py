@@ -1,4 +1,3 @@
-from enum import Enum
 import mutagen.id3
 import mutagen.easyid3
 import mutagen.apev2
@@ -9,7 +8,6 @@ from PIL import Image, ImageFile
 from natsort import natsorted
 from os import path, scandir
 import json
-import enum
 
 from datetime import datetime
 from io import BytesIO
@@ -47,16 +45,69 @@ def split_tags(metadata: dict):
 		if len(disc_info) == 2:
 			metadata["totaldiscs"] = [disc_info[1]]
 
-def gen_tree(root: str, print_depth: int = 0) -> list:
+def form_audio_blob(info, tags, entry_path):
+	blob = {}
+	blob["type"] = "music"
+	blob["depth"] = info.bits_per_sample if hasattr(info, 'bits_per_sample') else 16
+	blob["rate"] = info.sample_rate if hasattr(info, 'sample_rate') else 44100
+	if hasattr(info, 'total_samples'):
+		blob["samples"] = info.total_samples
+	else:
+		blob["samples"] = int( blob["rate"]*info.length )
+	# id3 is a fucking retarded mess of a standard, so it requires some
+	# work to make it conform with any adequate standard
+	if isinstance(tags, mutagen.id3.ID3):
+		# use EasyID3 to get the metadata in humanly form
+		easy_tags = mutagen.easyid3.EasyID3(entry_path)
+		blob["metadata"] = dict( easy_tags.items() )
+		# then, try to split the tracknumber into tracknumber and totaltracks,
+		# since ID3 spec thinks that it's a god idea to save them together
+		split_tags(blob["metadata"])
+	# APEv2 tags contain adequate key=value pairs, but they have slightly more standardized
+	# values than Vorbis comments, so we only parse text values and external links.
+	# Unfurtunately, they don't support floating point values, so ReplayGain values
+	# are saved as text.
+	# They also have the weird slash notation for disk and track numbering.
+	# Another quirk is that their keys are case-sensitive, but it is strongly advised to
+	# never use keys which only differ in case.
+	elif isinstance(tags, mutagen.apev2.APEv2):
+		blob["metadata"] = {}
+		for key, item in tags.items():
+			key = key.lower()
+			if isinstance(item, (mutagen.apev2.APETextValue, mutagen.apev2.APEExtValue)):
+				if key == "track":
+					tracknumber_raw = item.value.split('/')
+					blob["metadata"]["tracknumber"] = [tracknumber_raw[0]]
+					if len(tracknumber_raw) == 2:
+						blob["metadata"]["totaltracks"] = [tracknumber_raw[1]]
+				elif key == "disc":
+					discnumber_raw = item.value.split('/')
+					blob["metadata"]["discnumber"] = [discnumber_raw[0]]
+					if len(discnumber_raw) == 2:
+						blob["metadata"]["totaldiscs"] = [discnumber_raw[1]]
+				else:
+					blob["metadata"][key] = [str(item.value)]
+	elif isinstance(tags, mutagen.mp4.MP4Tags):
+		tags = mutagen.easymp4.EasyMP4(entry_path).tags
+		if tags is None:
+			raise Exception(f"Could not open tags: '{entry_path}'")
+		blob["metadata"] = dict( tags.items() )
+		split_tags(blob["metadata"])
+	else:
+		blob["metadata"] = dict( tags.items() )
+	blob["metadata"] = dict( natsorted(blob["metadata"].items()) )
+	return blob
+
+
+def gen_tree(root: str, print_depth: int = 0) -> dict:
 	# initialize tree list
-	tree = []
+	tree: dict = {}
 	# scan each entry in the given directory
 	for entry in natsorted( scandir(root), key=lambda x: (x.is_dir(), x.name.lower()) ):
 		# init the object that will hold entry data representation (metadata blob)
-		blob: dict[str, str|float|list|dict] = { "name": entry.name }
 		entry_path = path.join(root, entry.name)
+		blob: dict[str, str|float|list|dict] = { "mtime": path.getmtime(entry_path) }
 		if entry.is_file():
-			blob["mtime"] = path.getmtime(entry_path)
 			# try opening the file as audio
 			try:
 				file = mutagen._file.File(entry_path)
@@ -75,55 +126,7 @@ def gen_tree(root: str, print_depth: int = 0) -> list:
 				info = None
 			# if mutagen opened the file, treat it as music
 			if tags is not None and info is not None:
-				blob["type"] = "music"
-				blob["depth"] = info.bits_per_sample if hasattr(info, 'bits_per_sample') else 16
-				blob["rate"] = info.sample_rate if hasattr(info, 'sample_rate') else 44100
-				if hasattr(info, 'total_samples'):
-					blob["samples"] = info.total_samples
-				else:
-					blob["samples"] = int( blob["rate"]*info.length )
-				# id3 is a fucking retarded mess of a standard, so it requires some
-				# work to make it conform with any adequate standard
-				if isinstance(tags, mutagen.id3.ID3):
-					# use EasyID3 to get the metadata in humanly form
-					easy_tags = mutagen.easyid3.EasyID3(entry_path)
-					blob["metadata"] = dict( easy_tags.items() )
-					# then, try to split the tracknumber into tracknumber and totaltracks,
-					# since ID3 spec thinks that it's a god idea to save them together
-					split_tags(blob["metadata"])
-				# APEv2 tags contain adequate key=value pairs, but they have slightly more standardized
-				# values than Vorbis comments, so we only parse text values and external links.
-				# Unfurtunately, they don't support floating point values, so ReplayGain values
-				# are saved as text.
-				# They also have the weird slash notation for disk and track numbering.
-				# Another quirk is that their keys are case-sensitive, but it is strongly advised to
-				# never use keys which only differ in case.
-				elif isinstance(tags, mutagen.apev2.APEv2):
-					blob["metadata"] = {}
-					for key, item in tags.items():
-						key = key.lower()
-						if isinstance(item, (mutagen.apev2.APETextValue, mutagen.apev2.APEExtValue)):
-							if key == "track":
-								tracknumber_raw = item.value.split('/')
-								blob["metadata"]["tracknumber"] = [tracknumber_raw[0]]
-								if len(tracknumber_raw) == 2:
-									blob["metadata"]["totaltracks"] = [tracknumber_raw[1]]
-							elif key == "disc":
-								discnumber_raw = item.value.split('/')
-								blob["metadata"]["discnumber"] = [discnumber_raw[0]]
-								if len(discnumber_raw) == 2:
-									blob["metadata"]["totaldiscs"] = [discnumber_raw[1]]
-							else:
-								blob["metadata"][key] = [str(item.value)]
-				elif isinstance(tags, mutagen.mp4.MP4Tags):
-					tags = mutagen.easymp4.EasyMP4(entry_path).tags
-					if tags is None:
-						raise Exception(f"Could not open tags: '{entry_path}'")
-					blob["metadata"] = dict( tags.items() )
-					split_tags(blob["metadata"])
-				else:
-					blob["metadata"] = dict( tags.items() )
-				blob["metadata"] = dict( natsorted(blob["metadata"].items()) )
+				blob.update( form_audio_blob(info, tags, entry_path) )
 			# if mutagen didn't open it as audio, try opening it as an image
 			else:
 				try:
@@ -135,12 +138,64 @@ def gen_tree(root: str, print_depth: int = 0) -> list:
 			if entry_path.count("/") == print_depth:
 				print(f"Working in '{entry_path}'")
 			blob["type"] = "dir"
-			blob["children"] = genTree(entry_path, print_depth)
+			blob["children"] = gen_tree(entry_path, print_depth)
 		else:
 			raise Exception(f"Encountered a non-file and non-directory entry while scanning: \
 					'{path.join(root, entry.name)}'.")
+		tree[entry.name] = blob
+	return dict(  natsorted( tree.items(), key=lambda x: (x[1]["type"], x[0]) )  )
+
+# returns tuple in such form: (tree, updated_release_count)
+def update_db(tree: dict, root: str, trust_mtime: bool = True) -> tuple[dict, int]:
+	# scan each entry in the given directory
+	for entry in natsorted( scandir(root), key=lambda x: (x.is_dir(), x.name.lower()) ):
+		modified = False
+		entry_path = path.join(root, entry.name)
+		blob: dict[str, str|float|list|dict] = { "mtime": path.getmtime(entry_path) }
+		if (	entry.name in tree.keys() and
+				blob["mtime"] == tree[entry.name]["mtime"]
+		):
+			# if mtimes can be trusted, this is enough to prove that the file is the same
+			if trust_mtime:
+				continue
+			# else, proceed with more thorough verification
+			if entry.is_file():
+				# try opening the file as audio
+				try:
+					file = mutagen._file.File(entry_path)
+					if file is not None:
+						tags = file.tags
+						info = file.info
+					else:
+						tags = None
+						info = None
+					del file
+				except Exception:
+					# it should return None if the file is not an audio file,
+					# so this is is highly unlikely, but, well, it's I/O
+					print(f"Mutagen error on {entry_path}.")
+					tags = None
+					info = None
+				# if mutagen opened the file, treat it as music
+				if tags is not None and info is not None:
+					blob.update( form_audio_blob(info, tags, entry_path) )
+					# if formed blob is the same as the old one, file is the same
+					if blob == tree[entry.name]:
+						continue
+					# else, set modified flag
+					modified = True
+				# if mutagen didn't open it as audio, always trust mtime
+				else:
+					continue
+			elif entry.is_dir():
+				blob["type"] = "dir"
+				blob["children"] = update_db(tree, entry_path, trust_mtime)
+			else:
+				raise Exception(f"Encountered a non-file and non-directory entry while scanning: \
+						'{path.join(root, entry.name)}'.")
 		tree.append(blob)
 	return natsorted(tree, key=lambda x: (x["type"], x["name"].lower()))
+
 
 # find a list of tracks lacking metadata
 def find_tracks_lacking_metadata(root: list[dict], tag: str) -> list[str]:

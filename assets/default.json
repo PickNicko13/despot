@@ -1,6 +1,5 @@
 {
-	"version": "0.1",
-	"library_root": "~/Music",
+	"trust_mtime": true,
 	"delete_removed": false,
 	"delete_updated": false,
 	"opus": {
@@ -12,7 +11,7 @@
 			"clipping_policy": "none"
 		}
 	},
-	"required_data": [
+	"critical_data": [
 		"title",
 		"tracknumber",
 		"discnumber",
