@@ -64,8 +64,7 @@ last_uploaded_track: {      //path to last uploaded tracks
     opus:           str
 }
 releases: {
-    *path_N*: {
-        album:      str
+    *path_N*: {             //path relative to DB root
         tracks: {
             *filename_N*: {
                 mtime:      float   //seconds since epoch to find modified files and directories
@@ -73,34 +72,26 @@ releases: {
                 length:     int     //length in samples
                 depth:      int     //bit depth
                 rate:       int     //sampling rate
-                links: {            //links to uploaded messages in telegram
-                    normal: str     //without reencoding
-                    opus:   str     //encoded as opus
-                }
+                link_orig:  str     //link to message in lossless channel
+                link_opus:  str     //link to message in opus channel
             }
         }
         files: {
             *filename_N*: {
                 mtime:      float   //seconds since epoch to find modified files and directories
-                links: {            //links to uploaded messages in telegram
-                    normal: str     //without reencoding
-                    opus:   str     //encoded as opus
-                }
+                link_orig:  str     //link to message in lossless channel
+                link_opus:  str     //link to message in opus channel
             }
         }
         images: {
             *filename_N*: {
                 mtime:      float   //seconds since epoch to find modified files and directories
-                links: {            //links to uploaded messages in telegram
-                    normal: str     //without reencoding
-                    opus:   str     //encoded as opus
-                }
+                link_orig:  str     //link to message in lossless channel
+                link_opus:  str     //link to message in opus channel
             }
         }
-        links: {            //links to uploaded messages in telegram
-            normal: str     //without reencoding
-            opus:   str     //encoded as opus
-        }
+        link_orig:  str     //link to message in lossless channel
+        link_opus:  str     //link to message in opus channel
     }
 }
 --------
