@@ -16,6 +16,7 @@ It can allocate a significant amount of RAM if you have a large collection. (~0.
 Save length in samples
 
 - [ ] Library issue detection
+    - [ ] Directories inside release folder
     - [ ] Different albums in one folder
     - [ ] Different albumartist in one folder
     - [ ] Different formats in one folder
@@ -25,19 +26,15 @@ Save length in samples
 ## Database model
 ```
 root                str     //path to library root directory
-update_time                 //last time the DB was updated
+update_time         float   //last time the DB was updated
 statistics: {               //precomputed statistical data
-    max_peak: {
-        track:      float   //maximum value of compensated peak for track_gain
-        album:      float   //maximum value of compensated peak for album_gain
-    }
+    max_track_peak: float   //maximum value of compensated peak for track_gain
+    max_album_peak: float   //maximum value of compensated peak for album_gain
     track_counts: {
         total:      int
         clipping:   int     //tracks that have peaks exceeding 1.0
-        uploaded: {
-            normal: int
-            opus:   int
-        }
+        uploaded_orig:  int
+        uploaded_opus:  int
         extension: {
             flac:   int
             mp3:    int
@@ -92,26 +89,6 @@ releases: {
         }
         link_orig:  str     //link to message in lossless channel
         link_opus:  str     //link to message in opus channel
-    }
-}
---------
-tree: {
-    *name*: { //entry
-        type:       str     //type in a relevant manner
-        mtime:      float   //seconds since epoch to find modified files and directories
-        children:   []      //if dir
-        /BEGIN/ if music
-        metadata:   {}
-        length:     int     //length in samples
-        depth:      int     //bit depth
-        rate:       int     //sampling rate
-        /END/ if music
-        /BEGIN/ if music OR dir
-        links: {            //links to uploaded messages in telegram
-            normal: str     //without reencoding
-            opus:   str     //encoded as opus
-        }
-        /END/ if music OR dir
     }
 }
 ```

@@ -8,6 +8,7 @@ from PIL import Image, ImageFile
 from natsort import natsorted
 from os import path, scandir
 import json
+from wcmatch import wcmatch
 
 from datetime import datetime
 from io import BytesIO
@@ -21,9 +22,9 @@ DB_ROOT = path.expanduser('~/.local/share/despot')
 CONFIG_PATH = path.expanduser('~/.config/despot/config.json')
 VERSION = '0.1'
 MUSIC_EXTENSIONS = { # TODO
-		"LOSSLESS": ['.flac','.alac','.dsf','.ape','.tak'],
-		"LOSSY": ['.mp3','.opus','.aac'],
-		"MIXED": ['.wv','.ac3', '.m4a', '.ogg', '.wma']
+		"LOSSLESS": ['flac','alac','dsf','ape','tak'],
+		"LOSSY": ['mp3','opus','aac'],
+		"MIXED": ['wv','ac3', 'm4a', 'ogg', 'wma']
 		}
 
 # don't break if an image is truncated
@@ -31,6 +32,19 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 # disable zipbomb protection (which prevents large images from loading
 # and is not really a concern if it's in your own music library anyway)
 Image.MAX_IMAGE_PIXELS = None
+
+# get 3 lists similar to comm utility:
+# unique to list1,
+# unique to list2,
+# common
+def comm(list1, list2):
+	set1 = set(list1)
+	set2 = set(list2)
+	return list(set1 - set2), list(set2 - set1), list(set1 & set2)
+
+# decibels to absolute value value
+def db_gain(db: float):
+	return 10**(db/20)
 
 # split tag by slash
 def split_tags(metadata: dict):
@@ -47,7 +61,6 @@ def split_tags(metadata: dict):
 
 def form_audio_blob(info, tags, entry_path):
 	blob = {}
-	blob["type"] = "music"
 	blob["depth"] = info.bits_per_sample if hasattr(info, 'bits_per_sample') else 16
 	blob["rate"] = info.sample_rate if hasattr(info, 'sample_rate') else 44100
 	if hasattr(info, 'total_samples'):
@@ -98,16 +111,32 @@ def form_audio_blob(info, tags, entry_path):
 	blob["metadata"] = dict( natsorted(blob["metadata"].items()) )
 	return blob
 
+def gen_release_list(root: str) -> list[str]:
+	return natsorted(set( path.dirname(file) for file in wcmatch.WcMatch(
+				root,
+				'|'.join(['*.'+ext for ext_list in MUSIC_EXTENSIONS.values() for ext in ext_list]),
+				flags=wcmatch.RECURSIVE|wcmatch.IGNORECASE
+			).match() ))
 
-def gen_tree(root: str, print_depth: int = 0) -> dict:
-	# initialize tree list
-	tree: dict = {}
+def scan_release(release_path: str, mtime_only: bool = False) -> dict:
+	release = {} if mtime_only else {
+										"tracks": {},
+										"images": {},
+										"files": {}
+									}
 	# scan each entry in the given directory
-	for entry in natsorted( scandir(root), key=lambda x: (x.is_dir(), x.name.lower()) ):
-		# init the object that will hold entry data representation (metadata blob)
-		entry_path = path.join(root, entry.name)
-		blob: dict[str, str|float|list|dict] = { "mtime": path.getmtime(entry_path) }
+	for entry in natsorted(
+				scandir(release_path),
+				key=lambda x: (x.is_dir(), x.name.lower())
+		):
 		if entry.is_file():
+			# init the object that will hold entry data representation (metadata blob)
+			entry_path = path.join(release_path, entry.name)
+			blob: dict[str, str|float|list|dict] = { "mtime": path.getmtime(entry_path) }
+			# if scanning only for mtimes, use simplex method
+			if mtime_only:
+				release[entry.name] = blob
+				continue
 			# try opening the file as audio
 			try:
 				file = mutagen._file.File(entry_path)
@@ -127,86 +156,78 @@ def gen_tree(root: str, print_depth: int = 0) -> dict:
 			# if mutagen opened the file, treat it as music
 			if tags is not None and info is not None:
 				blob.update( form_audio_blob(info, tags, entry_path) )
+				release["tracks"][entry.name] = blob
 			# if mutagen didn't open it as audio, try opening it as an image
 			else:
 				try:
 					Image.open(entry_path).verify()
-					blob["type"] = "image"
+					release["images"][entry.name] = blob
 				except Exception:
-					blob["type"] = "file"
-		elif entry.is_dir():
-			if entry_path.count("/") == print_depth:
-				print(f"Working in '{entry_path}'")
-			blob["type"] = "dir"
-			blob["children"] = gen_tree(entry_path, print_depth)
-		else:
-			raise Exception(f"Encountered a non-file and non-directory entry while scanning: \
-					'{path.join(root, entry.name)}'.")
-		tree[entry.name] = blob
-	return dict(  natsorted( tree.items(), key=lambda x: (x[1]["type"], x[0]) )  )
+					release["files"][entry.name] = blob
+	for ftype in release:
+		if ftype == {}:
+			release.pop(ftype)
+	return release
+
+def find_similar_release(releases: dict, release_src: dict) -> str|None:
+	release = release_src
+	if 'link_orig' in release.keys():
+		release.pop('link_orig')
+	if 'link_opus' in release.keys():
+		release.pop('link_opus')
+	key = [k for k, v in releases.items() if v == release]
+	if len(key) == 1:
+		return key[0]
 
 # returns tuple in such form: (tree, updated_release_count)
-def update_db(tree: dict, root: str, trust_mtime: bool = True) -> tuple[dict, int]:
-	# scan each entry in the given directory
-	for entry in natsorted( scandir(root), key=lambda x: (x.is_dir(), x.name.lower()) ):
-		modified = False
-		entry_path = path.join(root, entry.name)
-		blob: dict[str, str|float|list|dict] = { "mtime": path.getmtime(entry_path) }
-		if (	entry.name in tree.keys() and
-				blob["mtime"] == tree[entry.name]["mtime"]
-		):
-			# if mtimes can be trusted, this is enough to prove that the file is the same
-			if trust_mtime:
-				continue
-			# else, proceed with more thorough verification
-			if entry.is_file():
-				# try opening the file as audio
-				try:
-					file = mutagen._file.File(entry_path)
-					if file is not None:
-						tags = file.tags
-						info = file.info
-					else:
-						tags = None
-						info = None
-					del file
-				except Exception:
-					# it should return None if the file is not an audio file,
-					# so this is is highly unlikely, but, well, it's I/O
-					print(f"Mutagen error on {entry_path}.")
-					tags = None
-					info = None
-				# if mutagen opened the file, treat it as music
-				if tags is not None and info is not None:
-					blob.update( form_audio_blob(info, tags, entry_path) )
-					# if formed blob is the same as the old one, file is the same
-					if blob == tree[entry.name]:
-						continue
-					# else, set modified flag
-					modified = True
-				# if mutagen didn't open it as audio, always trust mtime
-				else:
-					continue
-			elif entry.is_dir():
-				blob["type"] = "dir"
-				blob["children"] = update_db(tree, entry_path, trust_mtime)
-			else:
-				raise Exception(f"Encountered a non-file and non-directory entry while scanning: \
-						'{path.join(root, entry.name)}'.")
-		tree.append(blob)
-	return natsorted(tree, key=lambda x: (x["type"], x["name"].lower()))
-
+def update_db(db: dict, trust_mtime: bool = True)-> tuple[list[str],list[str],list[str]]:
+	# generate fresh release list and get the old one
+	release_list = gen_release_list(db["root"])
+	old_release_list = db["releases"].keys()
+	# init new lists
+	# note that "modified_releases" is more like "either modified or not modified releases"
+	# this list will further be shrunk
+	new_releases, deleted_releases, modified_releases = comm(release_list, old_release_list)
+	# detect new and modified releases
+	for release in modified_releases:
+		if trust_mtime:
+			files = scan_release(release, mtime_only=True)
+			old_files = dict(
+					(name,{"mtime":data["mtime"]}) for name,data in old_release_list.items()
+					for name,data in data.items()
+			)
+		else:
+			files = scan_release(release)
+			old_files = dict(
+					(name,data) for name,data in old_release_list.items()
+					for name,data in data.items()
+			)
+		# if file list and corresponding data is the same,
+		# release hasn't changed, so remove it from modified
+		if files == old_files:
+			modified_releases.remove(release)
+	new_scans = {}
+	for release in new_releases:
+		new_scans[release] = scan_release(release)
+	del new_releases
+	### at this point all the release data is correct and usable
+	# try finding "new" releases exactly the same as a "deleted" releases
+	for release in deleted_releases:
+		key = find_similar_release(new_scans, db["releases"][release])
+		if key is not None:
+			db["releases"][key] = db["releases"].pop[release]
+			deleted_releases.remove(release)
+			new_scans.pop(key)
+	db["releases"].update(new_scans)
+	return deleted_releases, modified_releases, list(new_scans.keys())
 
 # find a list of tracks lacking metadata
-def find_tracks_lacking_metadata(root: list[dict], tag: str) -> list[str]:
+def find_tracks_lacking_metadata(releases: dict, tag: str) -> list[str]:
 	missing: list[str] = []
-	for entry in root:
-		if entry["type"] == "dir":
-			for new_missing in find_tracks_lacking_metadata(entry["children"], tag):
-				missing.extend( path.join(entry["name"], new_missing) )
-		elif entry["type"] == "music":
-			if tag not in entry["metadata"].keys():
-				missing.append( entry["name"] )
+	for release_path, value in releases.items():
+		for track_name, track in value["tracks"].items():
+			if tag not in track["metadata"].keys():
+				missing.append( path.join(release_path, track_name) )
 	return missing
 
 def sum_track_counts(main: dict, new: dict[str|int, int|dict]):
@@ -219,21 +240,17 @@ def sum_track_counts(main: dict, new: dict[str|int, int|dict]):
 			else:
 				main[key] = value
 
-def tree_stats(root: list[dict],
+def tree_stats(releases: dict,
 				critical_metadata: list[str] = [],
 				wanted_metadata: list[str] = []) -> dict:
 	statistics = {
-		"max_peak": {
-			"track": 0.0,
-			"album": 0.0
-		},
+		"max_track_peak": 0.0,
+		"max_album_peak": 0.0,
 		"track_counts": {
 			"total": 0,
 			"clipping": 0,
-			"uploaded": {
-				"normal": 0,
-				"opus": 0
-			},
+			"uploaded_orig": 0,
+			"uploaded_opus": 0,
 			"extension": {},
 			"depth": {},
 			"rate": {},
@@ -244,64 +261,53 @@ def tree_stats(root: list[dict],
 		}
 	}
 
-	for entry in root:
-		# if directory, recurse and max/add the values
-		if entry["type"] == "dir":
-			child_stats = tree_stats(entry["children"], critical_metadata, wanted_metadata)
-			statistics["max_peak"]["track"] = max(
-					child_stats["max_peak"]["track"],
-					statistics["max_peak"]["track"])
-			statistics["max_peak"]["album"] = max(
-					child_stats["max_peak"]["album"],
-					statistics["max_peak"]["album"])
-			sum_track_counts(statistics["track_counts"], child_stats["track_counts"])
-		# if music, work on it
-		elif entry["type"] == "music":
+	for release in releases:
+		# add release track count to total track count
+		statistics["track_counts"]["total"] += len(release["tracks"])
+		for track_name, track in release["tracks"].items():
 			# init variables
-			metadata = entry["metadata"]
+			metadata = track["metadata"]
 			peak = 0.0
 			# get peak values, compensate them for gain and save the max value
 			if ( "replaygain_track_peak" in metadata.keys()
 					and "replaygain_track_gain" in metadata.keys() ):
 				peak = float( metadata["replaygain_track_peak"][0] )
-				db_gain = float( metadata["replaygain_track_gain"][0].lower().
+				db = float( metadata["replaygain_track_gain"][0].lower().
 					removesuffix('db').removesuffix('lufs') )
-				if db_gain != float('inf'):
-					peak *= 10**(db_gain/20)
+				if db != float('inf'):
+					peak *= db_gain(db)
 					statistics["max_peak"]["track"] = max( peak, statistics["max_peak"]["track"] )
 			if ( "replaygain_album_peak" in metadata.keys()
 					and "replaygain_album_gain" in metadata.keys() ):
 				peak = float( metadata["replaygain_album_peak"][0] )
-				db_gain = float( metadata["replaygain_album_gain"][0].lower().
+				db = float( metadata["replaygain_album_gain"][0].lower().
 					removesuffix('db').removesuffix('lufs') )
-				if db_gain != float('inf'):
-					peak *= 10**(db_gain/20)
+				if db != float('inf'):
+					peak *= db_gain(db)
 					statistics["max_peak"]["album"] = max( peak, statistics["max_peak"]["album"] )
-			# increment track count
-			statistics["track_counts"]["total"] += 1
 			# classify track as clipping if peak over 1
 			statistics["track_counts"]["clipping"] += (peak > 1.0)
 			# classify track as uploaded if links exist
-			if "links" in entry.keys():
-				statistics["track_counts"]["clipping"] += ("normal" in entry["links"])
-				statistics["track_counts"]["clipping"] += ("opus" in entry["links"])
+			if "link_orig" in track.keys():
+				statistics["track_counts"]["uploaded_orig"] += 1
+			if "link_opus" in track.keys():
+				statistics["track_counts"]["uploaded_opus"] += 1
 			# classify track by extension
-			ext = path.splitext(entry["name"])[1].lower()
+			ext = path.splitext(track_name)[1].lower()
 			if ext in statistics["track_counts"]["extension"].keys():
 				statistics["track_counts"]["extension"][ext] += 1
 			else:
 				statistics["track_counts"]["extension"][ext] = 1
-			del ext
 			# classify track by bit depth
-			if entry["depth"] in statistics["track_counts"]["depth"].keys():
-				statistics["track_counts"]["depth"][entry["depth"]] += 1
+			if track["depth"] in statistics["track_counts"]["depth"].keys():
+				statistics["track_counts"]["depth"][track["depth"]] += 1
 			else:
-				statistics["track_counts"]["depth"][entry["depth"]] = 1
+				statistics["track_counts"]["depth"][track["depth"]] = 1
 			# classify track by sampling rate
-			if entry["rate"] in statistics["track_counts"]["rate"].keys():
-				statistics["track_counts"]["rate"][entry["rate"]] += 1
+			if track["rate"] in statistics["track_counts"]["rate"].keys():
+				statistics["track_counts"]["rate"][track["rate"]] += 1
 			else:
-				statistics["track_counts"]["rate"][entry["rate"]] = 1
+				statistics["track_counts"]["rate"][track["rate"]] = 1
 			# classify track by lacking metadata
 			if any( data not in metadata.keys() for data in critical_metadata ):
 				statistics["track_counts"]["lacking_metadata"]["critical"] += 1
