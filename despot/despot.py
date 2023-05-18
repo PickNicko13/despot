@@ -6,16 +6,17 @@ import mutagen.mp4
 import mutagen.easymp4
 from PIL import Image, ImageFile
 from natsort import natsorted
-from os import path, scandir
+from os import path, scandir, makedirs
 import json
 from wcmatch import wcmatch
-
+import zstandard
 from datetime import datetime
+import time
+
 from io import BytesIO
 from pyrogram.client import Client
 import re
 import sys
-import time
 
 DEFAULT_CONFIG_PATH = path.join(path.realpath(__file__),'assets/default.json')
 DB_ROOT = path.expanduser('~/.local/share/despot')
@@ -45,6 +46,11 @@ def comm(list1, list2):
 # decibels to absolute value value
 def db_gain(db: float):
 	return 10**(db/20)
+
+def backup_db(db: dict, root: str):
+	makedirs(root, exist_ok=True)
+	with open(path.join(root,f"{datetime.today()}.zstd"), 'wb') as file:
+		file.write( zstandard.compress(json.dumps(db, ensure_ascii=False).encode()) )
 
 # split tag by slash
 def split_tags(metadata: dict):
