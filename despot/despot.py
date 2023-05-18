@@ -258,24 +258,74 @@ def update_db(db: dict, trust_mtime: bool = True) -> tuple[list[str],list[str],d
 	return deleted_releases, modified_releases, new_scans
 
 # find a list of tracks lacking metadata
-def find_tracks_lacking_metadata(releases: dict, tag: str) -> list[str]:
-	missing: list[str] = []
+def find_tracks_lacking_tag(releases: dict, tag: str) -> dict[str,list[str]]:
+	found: dict = {}
 	for release_path, value in releases.items():
 		for track_name, track in value["tracks"].items():
 			if tag not in track["metadata"].keys():
-				missing.append( path.join(release_path, track_name) )
-	return missing
+				if release_path not in found.keys():
+					found[release_path] = []
+				found[release_path].append( path.join(release_path, track_name) )
+	return found
 
-def sum_track_counts(main: dict, new: dict[str|int, int|dict]):
-	for key, value in new.items():
-		if isinstance(value, dict):
-			sum_track_counts(main[key],value)
-		else:
-			if key in main.keys():
-				main[key] += value
-			else:
-				main[key] = value
+# find releases with differring extensions in a single directory
+def find_multi_ext_releases(releases: dict) -> list[str]:
+	found: list[str] = []
+	for release_path, value in releases.items():
+		extensions = []
+		for track_name in value["tracks"].keys():
+			ext = path.splitext(track_name)[1]
+			if ext not in extensions:
+				extensions.append(ext)
+				if len(extensions) > 1:
+					found.append( release_path )
+					break
+	return found
 
+# find releases with differring tag in a single directory
+def find_multi_tag_releases(releases: dict, tag: str) -> list[str]:
+	found: list[str] = []
+	for release_path, value in releases.items():
+		different = []
+		for track_name, track in value["tracks"].items():
+			if tag in track["metadata"] and track["metadata"][tag][0] not in different:
+				different.append(track["metadata"][tag][0])
+				if len(different) > 1:
+					found.append( release_path )
+					break
+	return found
+
+# find tracks which clip in either track or album gain mode
+# returns two dicts in such form:
+#	track_path: peak_value
+# first dict is for track compensated peaks, second is for the album compensated track peaks
+def find_clipping_tracks(releases: dict) -> tuple[dict[str,float], dict[str,float]]:
+	clip_album: dict = {}
+	clip_track: dict = {}
+	for release_path, value in releases.items():
+		for track_name, track in value["tracks"].items():
+			if ( "replaygain_track_peak" in track["metadata"].keys()
+					and "replaygain_album_gain" in track["metadata"].keys() ):
+				peak = float( track["metadata"]["replaygain_album_peak"][0] )
+				db = float( track["metadata"]["replaygain_album_gain"][0].lower().
+					removesuffix('db').removesuffix('lufs') )
+				if db != float('inf'):
+					peak *= db_gain(db)
+					if peak > 1:
+						clip_album[path.join(release_path,track_name)] = peak
+			if ( "replaygain_track_peak" in track["metadata"].keys()
+					and "replaygain_track_gain" in track["metadata"].keys() ):
+				peak = float( track["metadata"]["replaygain_track_peak"][0] )
+				db = float( track["metadata"]["replaygain_track_gain"][0].lower().
+					removesuffix('db').removesuffix('lufs') )
+				if db != float('inf'):
+					peak *= db_gain(db)
+					if peak > 1:
+						clip_track[path.join(release_path,track_name)] = peak
+	return ( dict(sorted(clip_track.items(), key=lambda x:x[1])),
+				dict(sorted(clip_album.items(), key=lambda x:x[1])) )
+
+# calculate statistics for the given database
 def calc_stats(releases: dict,
 				critical_metadata: list[str] = [],
 				wanted_metadata: list[str] = []) -> dict:

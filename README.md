@@ -7,19 +7,18 @@
 The name was chosen like such: "spotify" => "despotifier" => "despot".
 It symbolizes the main author's personal despise for spotify.
 
+## What it can do now
+
+- Library issue detection
+    - Missing metadata
+    - Different tags in one folder
+    - Different extension tracks in one folder
+
 ## Notes
 
 It can allocate a significant amount of RAM if you have a large collection. (~0.5GiB for my ~1.6TiB collection)
 
-# TODO
-
-- [ ] Library issue detection
-    - [ ] Directories inside release folder
-    - [ ] Different albums in one folder
-    - [ ] Different albumartist in one folder
-    - [ ] Different formats in one folder
-    - [ ] Wrong or missing replaygain tags
-    - [ ] Test files similar to `flac -t`
+* outdated RAM usage info
 
 ## Database model
 ```
@@ -101,7 +100,7 @@ This has several benefits:
 4) smaller database size
 5) simpler database updates
 
-
+# TODO
 
 ## OFFTOP
 - [ ] get the target loudness that fits at least 95% of my music, but ideally >99.9%
