@@ -13,8 +13,6 @@ It can allocate a significant amount of RAM if you have a large collection. (~0.
 
 # TODO
 
-Save length in samples
-
 - [ ] Library issue detection
     - [ ] Directories inside release folder
     - [ ] Different albums in one folder

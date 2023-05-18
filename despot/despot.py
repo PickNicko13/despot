@@ -115,7 +115,7 @@ def gen_release_list(root: str) -> list[str]:
 	return natsorted(set( path.dirname(file) for file in wcmatch.WcMatch(
 				root,
 				'|'.join(['*.'+ext for ext_list in MUSIC_EXTENSIONS.values() for ext in ext_list]),
-				flags=wcmatch.RECURSIVE|wcmatch.IGNORECASE
+				flags=wcmatch.RECURSIVE|wcmatch.IGNORECASE|wcmatch.SYMLINKS
 			).match() ))
 
 def scan_release(release_path: str, mtime_only: bool = False) -> dict:
@@ -180,7 +180,7 @@ def find_similar_release(releases: dict, release_src: dict) -> str|None:
 		return key[0]
 
 # returns tuple in such form: (tree, updated_release_count)
-def update_db(db: dict, trust_mtime: bool = True)-> tuple[list[str],list[str],list[str]]:
+def update_db(db: dict, trust_mtime: bool = True) -> tuple[list[str],list[str],dict]:
 	# generate fresh release list and get the old one
 	release_list = gen_release_list(db["root"])
 	old_release_list = db["releases"].keys()
@@ -193,14 +193,16 @@ def update_db(db: dict, trust_mtime: bool = True)-> tuple[list[str],list[str],li
 		if trust_mtime:
 			files = scan_release(release, mtime_only=True)
 			old_files = dict(
-					(name,{"mtime":data["mtime"]}) for name,data in old_release_list.items()
-					for name,data in data.items()
+					(name,{"mtime":data["mtime"]})
+					for filetype in ("tracks","images","files")
+					for name,data in db["releases"][release][filetype].items()
 			)
 		else:
 			files = scan_release(release)
 			old_files = dict(
-					(name,data) for name,data in old_release_list.items()
-					for name,data in data.items()
+					(name,data)
+					for filetype in ("tracks","images","files")
+					for name,data in db["releases"][release][filetype].items()
 			)
 		# if file list and corresponding data is the same,
 		# release hasn't changed, so remove it from modified
@@ -210,16 +212,22 @@ def update_db(db: dict, trust_mtime: bool = True)-> tuple[list[str],list[str],li
 	for release in new_releases:
 		new_scans[release] = scan_release(release)
 	del new_releases
+	print(f"Deleted: {deleted_releases}\n")
 	### at this point all the release data is correct and usable
 	# try finding "new" releases exactly the same as a "deleted" releases
+	delete = {}
 	for release in deleted_releases:
 		key = find_similar_release(new_scans, db["releases"][release])
 		if key is not None:
-			db["releases"][key] = db["releases"].pop[release]
-			deleted_releases.remove(release)
-			new_scans.pop(key)
+			delete[key] = release
+	for key,release in delete.items():
+		db["releases"][key] = db["releases"].pop(release)
+		deleted_releases.remove(release)
+		new_scans.pop(key)
+		print(f"Moved '{release}' to '{key}'")
 	db["releases"].update(new_scans)
-	return deleted_releases, modified_releases, list(new_scans.keys())
+	db["statistics"] = calc_stats(db["releases"])
+	return deleted_releases, modified_releases, new_scans
 
 # find a list of tracks lacking metadata
 def find_tracks_lacking_metadata(releases: dict, tag: str) -> list[str]:
@@ -240,7 +248,7 @@ def sum_track_counts(main: dict, new: dict[str|int, int|dict]):
 			else:
 				main[key] = value
 
-def tree_stats(releases: dict,
+def calc_stats(releases: dict,
 				critical_metadata: list[str] = [],
 				wanted_metadata: list[str] = []) -> dict:
 	statistics = {
@@ -261,7 +269,7 @@ def tree_stats(releases: dict,
 		}
 	}
 
-	for release in releases:
+	for release in releases.values():
 		# add release track count to total track count
 		statistics["track_counts"]["total"] += len(release["tracks"])
 		for track_name, track in release["tracks"].items():
@@ -360,9 +368,10 @@ class Despot:
 		if not path.isdir(self.config['library_root']):
 			raise Exception("The specified library root is not a directory.")
 
-		db: dict[str, list|dict|float] = dict()
-		db["tree"] = gen_tree(self.config['library_root'])
-		db["statistics"] = tree_stats(db["tree"])
+		db: dict[str, list|dict|float|str] = dict()
+		releases = gen_release_list(self.config['library_root'])
+		db["tree"] = gen_release_list(self.config['library_root'])
+		db["statistics"] = calc_stats(db["tree"])
 		db["update_time"] = time.time()
 		db["version"] = VERSION
 
