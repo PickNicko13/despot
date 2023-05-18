@@ -1,9 +1,11 @@
-import mutagen.id3
-import mutagen.easyid3
-import mutagen.apev2
 import mutagen._file
-import mutagen.mp4
+import mutagen._vorbis
+import mutagen.apev2
+import mutagen.asf
+import mutagen.easyid3
 import mutagen.easymp4
+import mutagen.id3
+import mutagen.mp4
 from PIL import Image, ImageFile
 from natsort import natsorted
 from os import path, scandir, makedirs
@@ -65,7 +67,9 @@ def split_tags(metadata: dict):
 		if len(disc_info) == 2:
 			metadata["totaldiscs"] = [disc_info[1]]
 
-def form_audio_blob(info, tags, entry_path):
+def form_audio_blob(mutafile, entry_path):
+	info = mutafile.info
+	tags = mutafile.tags
 	blob = {}
 	blob["depth"] = info.bits_per_sample if hasattr(info, 'bits_per_sample') else 16
 	blob["rate"] = info.sample_rate if hasattr(info, 'sample_rate') else 44100
@@ -76,6 +80,8 @@ def form_audio_blob(info, tags, entry_path):
 	# id3 is a fucking retarded mess of a standard, so it requires some
 	# work to make it conform with any adequate standard
 	if isinstance(tags, mutagen.id3.ID3):
+		# detect embedded image
+		blob["embedded_image"] = 'APIC:' in tags.keys()
 		# use EasyID3 to get the metadata in humanly form
 		easy_tags = mutagen.easyid3.EasyID3(entry_path)
 		blob["metadata"] = dict( easy_tags.items() )
@@ -90,6 +96,7 @@ def form_audio_blob(info, tags, entry_path):
 	# Another quirk is that their keys are case-sensitive, but it is strongly advised to
 	# never use keys which only differ in case.
 	elif isinstance(tags, mutagen.apev2.APEv2):
+		blob["embedded_image"] = "cover art (front)" in tags
 		blob["metadata"] = {}
 		for key, item in tags.items():
 			key = key.lower()
@@ -107,12 +114,35 @@ def form_audio_blob(info, tags, entry_path):
 				else:
 					blob["metadata"][key] = [str(item.value)]
 	elif isinstance(tags, mutagen.mp4.MP4Tags):
+		blob["embedded_image"] = "covr" in tags
 		tags = mutagen.easymp4.EasyMP4(entry_path).tags
 		if tags is None:
 			raise Exception(f"Could not open tags: '{entry_path}'")
 		blob["metadata"] = dict( tags.items() )
 		split_tags(blob["metadata"])
-	else:
+	elif isinstance(tags, mutagen._vorbis.VCommentDict):
+		blob["embedded_image"] = "metadata_block_picture" in tags
+		blob["metadata"] = dict( tags.items() )
+	elif isinstance(tags, mutagen.asf.ASFTags):
+		blob["embedded_image"] = "WM/Picture" in tags
+		blob["metadata"] = {}
+		for key, item in tags.items():
+			key = key.lower()
+			if not isinstance(item, mutagen.asf._attrs.ASFByteArrayAttribute):
+				if key == "track":
+					tracknumber_raw = item.value.split('/')
+					blob["metadata"]["tracknumber"] = [tracknumber_raw[0]]
+					if len(tracknumber_raw) == 2:
+						blob["metadata"]["totaltracks"] = [tracknumber_raw[1]]
+				elif key == "disc":
+					discnumber_raw = item.value.split('/')
+					blob["metadata"]["discnumber"] = [discnumber_raw[0]]
+					if len(discnumber_raw) == 2:
+						blob["metadata"]["totaldiscs"] = [discnumber_raw[1]]
+				else:
+					blob["metadata"][key] = [str(item.value)]
+	elif tags is not None:
+		blob["embedded_image"] = len(mutafile.pictures) > 0 if hasattr(mutafile, 'pictures') else False
 		blob["metadata"] = dict( tags.items() )
 	blob["metadata"] = dict( natsorted(blob["metadata"].items()) )
 	return blob
@@ -145,23 +175,15 @@ def scan_release(release_path: str, mtime_only: bool = False) -> dict:
 				continue
 			# try opening the file as audio
 			try:
-				file = mutagen._file.File(entry_path)
-				if file is not None:
-					tags = file.tags
-					info = file.info
-				else:
-					tags = None
-					info = None
-				del file
+				mutafile = mutagen._file.File(entry_path)
 			except Exception:
+				mutafile = None
 				# it should return None if the file is not an audio file,
 				# so this is is highly unlikely, but, well, it's I/O
 				print(f"Mutagen error on {entry_path}.")
-				tags = None
-				info = None
 			# if mutagen opened the file, treat it as music
-			if tags is not None and info is not None:
-				blob.update( form_audio_blob(info, tags, entry_path) )
+			if mutafile is not None:
+				blob.update( form_audio_blob(mutafile, entry_path) )
 				release["tracks"][entry.name] = blob
 			# if mutagen didn't open it as audio, try opening it as an image
 			else:
