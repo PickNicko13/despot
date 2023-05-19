@@ -4,3 +4,5 @@ pyrogram
 pillow
 tgcrypto
 uvloop
+wcmatch
+zstandard
