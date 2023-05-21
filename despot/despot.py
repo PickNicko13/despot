@@ -241,8 +241,6 @@ def update_db(db: dict, trust_mtime: bool = True) -> tuple[list[str],list[str],d
 		# release hasn't changed, so remove it from modified
 		if files == old_files:
 			unmodified_releases.append(release)
-		else:
-			print(f"release {release} changed?!")
 	for release in unmodified_releases:
 		modified_releases.remove(release)
 	del unmodified_releases
