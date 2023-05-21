@@ -1,16 +1,15 @@
-from sys import argv
 from despot.despot import gen_release_list, scan_release, calc_stats
 import json
 import time
+from os import path
 
 db = {}
-db["root"] = '/home/pn13/repos/despot/test/library'
+db["root"] = path.join(path.dirname(path.realpath(__file__)),'library')
 
 t = time.time()
 release_list = gen_release_list(db["root"])
 print(f"release_list: {time.time()-t}")
 t = time.time()
-
 
 db["releases"] = {}
 for release in release_list:

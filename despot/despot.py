@@ -49,6 +49,7 @@ def comm(list1, list2):
 def db_gain(db: float):
 	return 10**(db/20)
 
+# a simple backup function
 def backup_db(db: dict, root: str):
 	makedirs(root, exist_ok=True)
 	with open(path.join(root,f"{datetime.today()}.zstd"), 'wb') as file:
@@ -67,6 +68,7 @@ def split_tags(metadata: dict):
 		if len(disc_info) == 2:
 			metadata["totaldiscs"] = [disc_info[1]]
 
+# form a blob with audio file information
 def form_audio_blob(mutafile, entry_path):
 	info = mutafile.info
 	tags = mutafile.tags
@@ -147,6 +149,7 @@ def form_audio_blob(mutafile, entry_path):
 	blob["metadata"] = dict( natsorted(blob["metadata"].items()) )
 	return blob
 
+# generate a list of releases nested under some directory
 def gen_release_list(root: str) -> list[str]:
 	return natsorted(set( path.dirname(file) for file in wcmatch.WcMatch(
 				root,
@@ -154,6 +157,7 @@ def gen_release_list(root: str) -> list[str]:
 				flags=wcmatch.RECURSIVE|wcmatch.IGNORECASE|wcmatch.SYMLINKS
 			).match() ))
 
+# generate a release dict for the given directory
 def scan_release(release_path: str, mtime_only: bool = False) -> dict:
 	release = {} if mtime_only else {
 										"tracks": {},
@@ -207,7 +211,7 @@ def find_similar_release(releases: dict, release_src: dict) -> str|None:
 	if len(key) == 1:
 		return key[0]
 
-# returns tuple in such form: (tree, updated_release_count)
+# returns tuple in such form: (deleted_releases, modified_releases, new_scans)
 def update_db(db: dict, trust_mtime: bool = True) -> tuple[list[str],list[str],dict]:
 	# generate fresh release list and get the old one
 	release_list = gen_release_list(db["root"])
@@ -216,7 +220,8 @@ def update_db(db: dict, trust_mtime: bool = True) -> tuple[list[str],list[str],d
 	# note that "modified_releases" is more like "either modified or not modified releases"
 	# this list will further be shrunk
 	new_releases, deleted_releases, modified_releases = comm(release_list, old_release_list)
-	# detect new and modified releases
+	unmodified_releases = []
+	# detect new and remove unmodified releases from "modified_releases"
 	for release in modified_releases:
 		if trust_mtime:
 			files = scan_release(release, mtime_only=True)
@@ -235,7 +240,12 @@ def update_db(db: dict, trust_mtime: bool = True) -> tuple[list[str],list[str],d
 		# if file list and corresponding data is the same,
 		# release hasn't changed, so remove it from modified
 		if files == old_files:
-			modified_releases.remove(release)
+			unmodified_releases.append(release)
+		else:
+			print(f"release {release} changed?!")
+	for release in unmodified_releases:
+		modified_releases.remove(release)
+	del unmodified_releases
 	new_scans = {}
 	for release in new_releases:
 		new_scans[release] = scan_release(release)

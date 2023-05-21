@@ -9,7 +9,7 @@ t = time.time()
 
 t = time.time()
 deleted_releases, modified_releases, new_scans = update_db(db)
-print(f"release_list: {time.time()-t}")
+print(f"update_db: {time.time()-t}")
 t = time.time()
 
 db["update_time"] = t
@@ -20,4 +20,6 @@ json.dump(
 		ensure_ascii=False)
 print(f"dump: {time.time()-t}")
 
+print(f"Deleted: {deleted_releases}")
 print(f"Modified: {modified_releases}")
+print(f"New: {new_scans.keys()}")
