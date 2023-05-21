@@ -1,9 +1,7 @@
 {
-	"trust_mtime": true,
 	"delete_removed": false,
 	"delete_updated": false,
 	"opus": {
-		"enabled": false,
 		"bitrate": 96,
 		"embed_cover": false,
 		"replaygain": {

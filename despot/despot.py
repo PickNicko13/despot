@@ -248,7 +248,6 @@ def update_db(db: dict, trust_mtime: bool = True) -> tuple[list[str],list[str],d
 	for release in new_releases:
 		new_scans[release] = scan_release(release)
 	del new_releases
-	print(f"Deleted: {deleted_releases}\n")
 	### at this point all the release data is correct and usable
 	# try finding "new" releases exactly the same as a "deleted" releases
 	delete = {}
