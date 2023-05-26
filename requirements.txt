@@ -6,3 +6,4 @@ tgcrypto
 uvloop
 wcmatch
 zstandard
+PyICU

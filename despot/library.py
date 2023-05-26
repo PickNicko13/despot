@@ -454,3 +454,10 @@ def get_tracks_with_embedded_images(releases: dict):
 	return [release_path
 			for release_path, release in releases.items()
 			if len(release["images"]) > 0]
+
+# get either the tag value or the fallback if it is missing
+def get_tag_fom_first_track(release: dict, tag: str, fallback: str = "METADATA MISSING"):
+	if tag in release["tracks"][0]["tags"]:
+		return release["tracks"][0]["tags"][tag][0]
+	else:
+		return fallback
