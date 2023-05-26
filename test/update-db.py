@@ -1,4 +1,4 @@
-from despot.despot import update_db
+from despot.library import update_db
 import json
 import time
 

@@ -1,4 +1,4 @@
-from despot.despot import find_clipping_tracks
+from despot.library import find_clipping_tracks
 import json
 import time
 

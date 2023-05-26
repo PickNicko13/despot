@@ -1,4 +1,4 @@
-from despot.despot import gen_release_list, scan_release, calc_stats
+from despot.library import gen_release_list, scan_release, calc_stats
 import json
 import time
 from os import path

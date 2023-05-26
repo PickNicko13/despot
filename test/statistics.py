@@ -1,5 +1,5 @@
 from sys import argv
-from despot.despot import tree_stats
+from despot.library import tree_stats
 import json
 from pprint import pprint
 import time
