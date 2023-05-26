@@ -57,17 +57,17 @@ def backup_db(db: dict, root: str):
 		file.write( zstandard.compress(json.dumps(db, ensure_ascii=False).encode()) )
 
 # split tag by slash
-def split_tags(metadata: dict):
-	if "tracknumber" in metadata.keys():
-		track_info = metadata['tracknumber'][0].split('/')
-		metadata["tracknumber"] = [track_info[0]]
+def split_tags(tags: dict):
+	if "tracknumber" in tags.keys():
+		track_info = tags['tracknumber'][0].split('/')
+		tags["tracknumber"] = [track_info[0]]
 		if len(track_info) == 2:
-			metadata["totaltracks"] = [track_info[1]]
-	if "discnumber" in metadata.keys():
-		disc_info = metadata['discnumber'][0].split('/')
-		metadata["discnumber"] = [disc_info[0]]
+			tags["totaltracks"] = [track_info[1]]
+	if "discnumber" in tags.keys():
+		disc_info = tags['discnumber'][0].split('/')
+		tags["discnumber"] = [disc_info[0]]
 		if len(disc_info) == 2:
-			metadata["totaldiscs"] = [disc_info[1]]
+			tags["totaldiscs"] = [disc_info[1]]
 
 # form a blob with audio file information
 def form_audio_blob(mutafile, entry_path):
@@ -85,12 +85,12 @@ def form_audio_blob(mutafile, entry_path):
 	if isinstance(tags, mutagen.id3.ID3):
 		# detect embedded image
 		blob["embedded_image"] = 'APIC:' in tags.keys()
-		# use EasyID3 to get the metadata in humanly form
+		# use EasyID3 to get the tags in humanly form
 		easy_tags = mutagen.easyid3.EasyID3(entry_path)
-		blob["metadata"] = dict( easy_tags.items() )
+		blob["tags"] = dict( easy_tags.items() )
 		# then, try to split the tracknumber into tracknumber and totaltracks,
 		# since ID3 spec thinks that it's a god idea to save them together
-		split_tags(blob["metadata"])
+		split_tags(blob["tags"])
 	# APEv2 tags contain adequate key=value pairs, but they have slightly more standardized
 	# values than Vorbis comments, so we only parse text values and external links.
 	# Unfurtunately, they don't support floating point values, so ReplayGain values
@@ -100,54 +100,54 @@ def form_audio_blob(mutafile, entry_path):
 	# never use keys which only differ in case.
 	elif isinstance(tags, mutagen.apev2.APEv2):
 		blob["embedded_image"] = "cover art (front)" in tags
-		blob["metadata"] = {}
+		blob["tags"] = {}
 		for key, item in tags.items():
 			key = key.lower()
 			if isinstance(item, (mutagen.apev2.APETextValue, mutagen.apev2.APEExtValue)):
 				if key == "track":
 					tracknumber_raw = item.value.split('/')
-					blob["metadata"]["tracknumber"] = [tracknumber_raw[0]]
+					blob["tags"]["tracknumber"] = [tracknumber_raw[0]]
 					if len(tracknumber_raw) == 2:
-						blob["metadata"]["totaltracks"] = [tracknumber_raw[1]]
+						blob["tags"]["totaltracks"] = [tracknumber_raw[1]]
 				elif key == "disc":
 					discnumber_raw = item.value.split('/')
-					blob["metadata"]["discnumber"] = [discnumber_raw[0]]
+					blob["tags"]["discnumber"] = [discnumber_raw[0]]
 					if len(discnumber_raw) == 2:
-						blob["metadata"]["totaldiscs"] = [discnumber_raw[1]]
+						blob["tags"]["totaldiscs"] = [discnumber_raw[1]]
 				else:
-					blob["metadata"][key] = [str(item.value)]
+					blob["tags"][key] = [str(item.value)]
 	elif isinstance(tags, mutagen.mp4.MP4Tags):
 		blob["embedded_image"] = "covr" in tags
 		tags = mutagen.easymp4.EasyMP4(entry_path).tags
 		if tags is None:
 			raise Exception(f"Could not open tags: '{entry_path}'")
-		blob["metadata"] = dict( tags.items() )
-		split_tags(blob["metadata"])
+		blob["tags"] = dict( tags.items() )
+		split_tags(blob["tags"])
 	elif isinstance(tags, mutagen._vorbis.VCommentDict):
-		blob["embedded_image"] = "metadata_block_picture" in tags
-		blob["metadata"] = dict( tags.items() )
+		blob["embedded_image"] = "tags_block_picture" in tags
+		blob["tags"] = dict( tags.items() )
 	elif isinstance(tags, mutagen.asf.ASFTags):
 		blob["embedded_image"] = "WM/Picture" in tags
-		blob["metadata"] = {}
+		blob["tags"] = {}
 		for key, item in tags.items():
 			key = key.lower()
 			if not isinstance(item, mutagen.asf._attrs.ASFByteArrayAttribute):
 				if key == "track":
 					tracknumber_raw = item.value.split('/')
-					blob["metadata"]["tracknumber"] = [tracknumber_raw[0]]
+					blob["tags"]["tracknumber"] = [tracknumber_raw[0]]
 					if len(tracknumber_raw) == 2:
-						blob["metadata"]["totaltracks"] = [tracknumber_raw[1]]
+						blob["tags"]["totaltracks"] = [tracknumber_raw[1]]
 				elif key == "disc":
 					discnumber_raw = item.value.split('/')
-					blob["metadata"]["discnumber"] = [discnumber_raw[0]]
+					blob["tags"]["discnumber"] = [discnumber_raw[0]]
 					if len(discnumber_raw) == 2:
-						blob["metadata"]["totaldiscs"] = [discnumber_raw[1]]
+						blob["tags"]["totaldiscs"] = [discnumber_raw[1]]
 				else:
-					blob["metadata"][key] = [str(item.value)]
+					blob["tags"][key] = [str(item.value)]
 	elif tags is not None:
 		blob["embedded_image"] = len(mutafile.pictures) > 0 if hasattr(mutafile, 'pictures') else False
-		blob["metadata"] = dict( tags.items() )
-	blob["metadata"] = dict( natsorted(blob["metadata"].items()) )
+		blob["tags"] = dict( tags.items() )
+	blob["tags"] = dict( natsorted(blob["tags"].items()) )
 	return blob
 
 # generate a list of releases nested under some directory
@@ -171,7 +171,7 @@ def scan_release(release_path: str, mtime_only: bool = False) -> dict:
 				key=lambda x: (x.is_dir(), x.name.lower())
 		):
 		if entry.is_file():
-			# init the object that will hold entry data representation (metadata blob)
+			# init the object that will hold entry data representation (tags blob)
 			entry_path = path.join(release_path, entry.name)
 			blob: dict[str, str|float|list|dict] = { "mtime": path.getmtime(entry_path) }
 			# if scanning only for mtimes, use simplex method
@@ -265,12 +265,12 @@ def update_db(db: dict, trust_mtime: bool = True) -> tuple[list[str],list[str],d
 	db["statistics"] = calc_stats(db["releases"])
 	return deleted_releases, modified_releases, new_scans
 
-# find a list of tracks lacking metadata
+# find a list of tracks lacking tags
 def find_tracks_lacking_tag(releases: dict, tag: str) -> dict[str,list[str]]:
 	found: dict = {}
 	for release_path, value in releases.items():
 		for track_name, track in value["tracks"].items():
-			if tag not in track["metadata"].keys():
+			if tag not in track["tags"].keys():
 				if release_path not in found.keys():
 					found[release_path] = []
 				found[release_path].append( path.join(release_path, track_name) )
@@ -296,8 +296,8 @@ def find_multi_tag_releases(releases: dict, tag: str) -> list[str]:
 	for release_path, value in releases.items():
 		different = []
 		for track_name, track in value["tracks"].items():
-			if tag in track["metadata"] and track["metadata"][tag][0] not in different:
-				different.append(track["metadata"][tag][0])
+			if tag in track["tags"] and track["tags"][tag][0] not in different:
+				different.append(track["tags"][tag][0])
 				if len(different) > 1:
 					found.append( release_path )
 					break
@@ -312,19 +312,19 @@ def find_clipping_tracks(releases: dict) -> tuple[dict[str,float], dict[str,floa
 	clip_track: dict = {}
 	for release_path, value in releases.items():
 		for track_name, track in value["tracks"].items():
-			if ( "replaygain_track_peak" in track["metadata"].keys()
-					and "replaygain_album_gain" in track["metadata"].keys() ):
-				peak = float( track["metadata"]["replaygain_album_peak"][0] )
-				db = float( track["metadata"]["replaygain_album_gain"][0].lower().
+			if ( "replaygain_track_peak" in track["tags"].keys()
+					and "replaygain_album_gain" in track["tags"].keys() ):
+				peak = float( track["tags"]["replaygain_album_peak"][0] )
+				db = float( track["tags"]["replaygain_album_gain"][0].lower().
 					removesuffix('db').removesuffix('lufs') )
 				if db != float('inf'):
 					peak *= db_gain(db)
 					if peak > 1:
 						clip_album[path.join(release_path,track_name)] = peak
-			if ( "replaygain_track_peak" in track["metadata"].keys()
-					and "replaygain_track_gain" in track["metadata"].keys() ):
-				peak = float( track["metadata"]["replaygain_track_peak"][0] )
-				db = float( track["metadata"]["replaygain_track_gain"][0].lower().
+			if ( "replaygain_track_peak" in track["tags"].keys()
+					and "replaygain_track_gain" in track["tags"].keys() ):
+				peak = float( track["tags"]["replaygain_track_peak"][0] )
+				db = float( track["tags"]["replaygain_track_gain"][0].lower().
 					removesuffix('db').removesuffix('lufs') )
 				if db != float('inf'):
 					peak *= db_gain(db)
@@ -335,8 +335,8 @@ def find_clipping_tracks(releases: dict) -> tuple[dict[str,float], dict[str,floa
 
 # calculate statistics for the given database
 def calc_stats(releases: dict,
-				critical_metadata: list[str] = [],
-				wanted_metadata: list[str] = []) -> dict:
+				critical_tags: list[str] = [],
+				wanted_tags: list[str] = []) -> dict:
 	statistics = {
 		"max_track_peak": 0.0,
 		"max_album_peak": 0.0,
@@ -348,7 +348,7 @@ def calc_stats(releases: dict,
 			"extension": {},
 			"depth": {},
 			"rate": {},
-			"lacking_metadata": {
+			"lacking_tags": {
 				"critical": 0,
 				"wanted": 0
 			}
@@ -360,21 +360,21 @@ def calc_stats(releases: dict,
 		statistics["track_counts"]["total"] += len(release["tracks"])
 		for track_name, track in release["tracks"].items():
 			# init variables
-			metadata = track["metadata"]
+			tags = track["tags"]
 			peak = 0.0
 			# get peak values, compensate them for gain and save the max value
-			if ( "replaygain_track_peak" in metadata.keys()
-					and "replaygain_track_gain" in metadata.keys() ):
-				peak = float( metadata["replaygain_track_peak"][0] )
-				db = float( metadata["replaygain_track_gain"][0].lower().
+			if ( "replaygain_track_peak" in tags.keys()
+					and "replaygain_track_gain" in tags.keys() ):
+				peak = float( tags["replaygain_track_peak"][0] )
+				db = float( tags["replaygain_track_gain"][0].lower().
 					removesuffix('db').removesuffix('lufs') )
 				if db != float('inf'):
 					peak *= db_gain(db)
 					statistics["max_peak"]["track"] = max( peak, statistics["max_peak"]["track"] )
-			if ( "replaygain_album_peak" in metadata.keys()
-					and "replaygain_album_gain" in metadata.keys() ):
-				peak = float( metadata["replaygain_album_peak"][0] )
-				db = float( metadata["replaygain_album_gain"][0].lower().
+			if ( "replaygain_album_peak" in tags.keys()
+					and "replaygain_album_gain" in tags.keys() ):
+				peak = float( tags["replaygain_album_peak"][0] )
+				db = float( tags["replaygain_album_gain"][0].lower().
 					removesuffix('db').removesuffix('lufs') )
 				if db != float('inf'):
 					peak *= db_gain(db)
@@ -402,11 +402,11 @@ def calc_stats(releases: dict,
 				statistics["track_counts"]["rate"][track["rate"]] += 1
 			else:
 				statistics["track_counts"]["rate"][track["rate"]] = 1
-			# classify track by lacking metadata
-			if any( data not in metadata.keys() for data in critical_metadata ):
-				statistics["track_counts"]["lacking_metadata"]["critical"] += 1
-			if any( data not in metadata.keys() for data in wanted_metadata ):
-				statistics["track_counts"]["lacking_metadata"]["wanted"] += 1
+			# classify track by lacking tags
+			if any( data not in tags.keys() for data in critical_tags ):
+				statistics["track_counts"]["lacking_tags"]["critical"] += 1
+			if any( data not in tags.keys() for data in wanted_tags ):
+				statistics["track_counts"]["lacking_tags"]["wanted"] += 1
 	return statistics
 
 # get the list of not yet uploaded releases

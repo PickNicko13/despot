@@ -1,5 +1,5 @@
 {
-	"formatting_string": "{albumartist} - {album} ({date}) [{depth_rates}]\n{latin_tracklist}",
+	"formatting_string": "{albumartist} - {album} ({date}) [{depth_rates}]\nTracks: {totaltracks}\n{latin_tracklist}",
 	"delete_removed": false,
 	"delete_updated": false,
 	"opus": {
@@ -10,7 +10,7 @@
 			"clipping_policy": "none"
 		}
 	},
-	"critical_data": [
+	"critical_tags": [
 		"title",
 		"tracknumber",
 		"discnumber",
@@ -19,7 +19,7 @@
 		"date",
 		"album"
 	],
-	"wanted_data": [
+	"wanted_tags": [
 		"totaltracks",
 		"totaldiscs",
 		"replaygain_album_gain",
