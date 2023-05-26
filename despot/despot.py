@@ -408,6 +408,40 @@ def calc_stats(releases: dict,
 				statistics["track_counts"]["lacking_metadata"]["wanted"] += 1
 	return statistics
 
+# get the list of not yet uploaded releases
+def get_not_uploaded_releases(releases: dict) -> dict[str,dict[str,list|str|None]]:
+	# init return blob
+	return_data = {
+			'orig': {
+				'not_uploaded': [],
+				'last': None
+			},
+			'opus': {
+				'not_uploaded': [],
+				'last': None
+			}
+	}
+	for release_name, release in releases.items():
+		if 'link_orig' not in release.keys():
+			return_data['orig']['not_uploaded'].append(release_name)
+			continue
+		for track in release['tracks']:
+			if 'link_orig' not in track.keys():
+				if return_data['orig']['last'] is not None:
+					raise Exception("Database was damaged - more than one release in progress.")
+				return_data['orig']['last'] = release_name
+				continue
+		if 'link_opus' not in release.keys():
+			return_data['opus']['not_uploaded'].append(release_name)
+			continue
+		for track in release['tracks']:
+			if 'link_opus' not in track.keys():
+				if return_data['opus']['last'] is not None:
+					raise Exception("Database was damaged - more than one release in progress.")
+				return_data['opus']['last'] = release_name
+				continue
+	return return_data
+
 class Despot:
 	def __init__( self, api_id: str|None = None, api_hash: str|None = None ) -> None:
 		if path.isfile(CONFIG_PATH):
