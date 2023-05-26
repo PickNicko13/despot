@@ -1,3 +1,4 @@
+from platform import release
 import mutagen._file
 import mutagen._vorbis
 import mutagen.apev2
@@ -441,6 +442,13 @@ def get_not_uploaded_releases(releases: dict) -> dict[str,dict[str,list|str|None
 				return_data['opus']['last'] = release_name
 				continue
 	return return_data
+
+# get list of tracks with embedded images
+def get_tracks_with_embedded_images(releases: dict):
+	return [path.join(release_path,name)
+			for release_path, release in releases.items()
+			for name, track in release["tracks"].items()
+			if track["embedded_image"]]
 
 class Despot:
 	def __init__( self, api_id: str|None = None, api_hash: str|None = None ) -> None:
