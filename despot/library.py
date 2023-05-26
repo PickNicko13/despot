@@ -443,9 +443,14 @@ def get_not_uploaded_releases(releases: dict) -> dict[str,dict[str,list|str|None
 				continue
 	return return_data
 
-# get list of tracks with embedded images
-def get_tracks_with_embedded_images(releases: dict):
-	return [path.join(release_path,name)
+# get list of releases with embedded images
+def get_releases_with_embedded_images(releases: dict):
+	return [release_path
 			for release_path, release in releases.items()
-			for name, track in release["tracks"].items()
-			if track["embedded_image"]]
+			if release["tracks"][0]["embedded_image"]]
+
+# get list of releases with external images
+def get_tracks_with_embedded_images(releases: dict):
+	return [release_path
+			for release_path, release in releases.items()
+			if len(release["images"]) > 0]

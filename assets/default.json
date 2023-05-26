@@ -1,4 +1,5 @@
 {
+	"formatting_string": "{albumartist} - {album} ({date}) [{depth_rates}]\n{latin_tracklist}",
 	"delete_removed": false,
 	"delete_updated": false,
 	"opus": {
