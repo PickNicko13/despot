@@ -1,5 +1,5 @@
 from despot.library import gen_release_list, scan_release, calc_stats
-from despot.whatever import wc_pad
+from despot.whatever import wc_normalize_length
 import json
 import time
 from os import path, get_terminal_size
@@ -16,7 +16,7 @@ t = time.time()
 db["releases"] = {}
 for c, release in enumerate(release_list):
 	print(
-			wc_pad(
+			wc_normalize_length(
 				f"[{c+1}/{len(release_list)}] '{release}'",
 				get_terminal_size().columns
 			),
