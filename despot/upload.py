@@ -1,21 +1,59 @@
 from despot.library import *
+import os.path
 from icu import Transliterator
+from PIL import Image
 
+# don't break if an image is truncated
+#ImageFile.LOAD_TRUNCATED_IMAGES = True
+# disable zipbomb protection (which prevents large images from loading
+# and is not really a concern if it's in your own music library anyway)
+Image.MAX_IMAGE_PIXELS = None
+
+# images are saved as jpegs with quality 77
+# it is because it looks like the telegram recompresses them with approximately this quality
+
+# format the user-defined release format string with the appropriate data
 def format_release_string(release_string: str, release: dict, track_separator: str = '. ') -> str:
+	# init transliterator
 	to_latin = Transliterator.createInstance("Any-Latin")
-
+	# init other formatting data (subject to expansion)
 	formatting_data = {
-			'album': get_tag_fom_first_track(release, 'album'),
-			'albumartist': get_tag_fom_first_track(release, 'albumartist'),
-			'date': get_tag_fom_first_track(release, 'date'),
-			'totaltracks': get_tag_fom_first_track(release, 'totaltracks'),
-			'depth_rates': set(f'{track["depth"]}/{track["rate"]}' for track in release["tracks"].values() )
-			}
+		'album': get_tag_fom_first_track(release, 'album'),
+		'albumartist': get_tag_fom_first_track(release, 'albumartist'),
+		'date': get_tag_fom_first_track(release, 'date'),
+		'totaltracks': get_tag_fom_first_track(release, 'totaltracks'),
+		'depth_rates': set(f'{track["depth"]}/{track["rate"]}' for track in release["tracks"].values() )
+	}
 	latin_tracklist = ""
+	# stack up tracklist
 	for track in release["tracks"].values():
 		latin_tracklist += f'\n{track["tracknumber"][0]}{track_separator}\
 				{to_latin.transliterate(track["title"][0])}'
 	return release_string.format(**formatting_data, latin_tracklist=latin_tracklist)
+
+# prepare the release artwork according to the telegram rules:
+# height and width <= 2560px
+# size <= 10M
+# either PNG or JPEG
+def prepare_artwork(img, path):
+	if( os.path.getsize(img.filename)/1024/1024 > 10 or
+			img.height > 2560 or img.width > 2560 or
+			img.format not in ('PNG', 'JPEG') ):
+		divider = img.width/2560 if img.width < img.height else img.height/2560
+		img = img.resize(( int(img.width//divider), int(img.height//divider) ))
+	img = img.convert('RGB')
+	img.save(path, "jpeg", quality=77)
+
+# prepare the thumbnail for the file according to the telegram rules:
+# height and width <= 320px
+# size <= 200K
+def prepare_thumbnail(img, path):
+	divider = img.width/320 if img.width < img.height else img.height/320
+	img = img.resize(( int(img.width//divider), int(img.height//divider) ))
+	img = img.convert('RGB')
+	img.save(path, "jpeg", quality=77)
+
+
 
 # class Despot:
 # 	def __init__( self, api_id: str|None = None, api_hash: str|None = None ) -> None:

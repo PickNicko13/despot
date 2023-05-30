@@ -1,4 +1,3 @@
-from platform import release
 import mutagen._file
 import mutagen._vorbis
 import mutagen.apev2
@@ -7,7 +6,7 @@ import mutagen.easyid3
 import mutagen.easymp4
 import mutagen.id3
 import mutagen.mp4
-from PIL import Image, ImageFile
+from PIL import Image
 from natsort import natsorted
 from os import path, scandir, makedirs
 import json
@@ -31,8 +30,6 @@ MUSIC_EXTENSIONS = { # TODO
 		"MIXED": ['wv','ac3', 'm4a', 'ogg', 'wma']
 		}
 
-# don't break if an image is truncated
-ImageFile.LOAD_TRUNCATED_IMAGES = True
 # disable zipbomb protection (which prevents large images from loading
 # and is not really a concern if it's in your own music library anyway)
 Image.MAX_IMAGE_PIXELS = None
@@ -76,6 +73,7 @@ def form_audio_blob(mutafile, entry_path):
 	blob = {}
 	blob["depth"] = info.bits_per_sample if hasattr(info, 'bits_per_sample') else 16
 	blob["rate"] = info.sample_rate if hasattr(info, 'sample_rate') else 44100
+	blob["length"] = info.length
 	if hasattr(info, 'total_samples'):
 		blob["samples"] = info.total_samples
 	else:
@@ -340,6 +338,7 @@ def calc_stats(releases: dict,
 	statistics = {
 		"max_track_peak": 0.0,
 		"max_album_peak": 0.0,
+		"total_length": 0.0,
 		"track_counts": {
 			"total": 0,
 			"clipping": 0,
@@ -359,6 +358,8 @@ def calc_stats(releases: dict,
 		# add release track count to total track count
 		statistics["track_counts"]["total"] += len(release["tracks"])
 		for track_name, track in release["tracks"].items():
+			# add track length to total length
+			statistics["total_length"] += track["length"]
 			# init variables
 			tags = track["tags"]
 			peak = 0.0

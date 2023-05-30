@@ -27,6 +27,7 @@ update_time         float   //last time the DB was updated
 statistics: {               //precomputed statistical data
     max_track_peak: float   //maximum value of compensated peak for track_gain
     max_album_peak: float   //maximum value of compensated peak for album_gain
+    total_length:   float   //combined playtime for all tracks
     track_counts: {
         total:      int
         clipping:   int     //tracks that have peaks exceeding 1.0
@@ -63,7 +64,8 @@ releases: {
             *filename_N*: {
                 mtime:      float   //seconds since epoch to find modified files and directories
                 metadata:   {}
-                length:     int     //length in samples
+                length:     float   //length (seconds)
+                samples:    int     //length (samples)
                 depth:      int     //bit depth
                 rate:       int     //sampling rate
                 link_orig:  str     //link to message in lossless channel
