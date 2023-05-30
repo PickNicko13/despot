@@ -193,13 +193,13 @@ def scan_release(release_path: str, mtime_only: bool = False) -> dict:
 				if mutafile is not None:
 					blob.update( form_audio_blob(mutafile, entry_path) )
 					release["tracks"][entry.name] = blob
-			# if mutagen didn't open it as audio, try opening it as an image
-			else:
-				try:
-					Image.open(entry_path).verify()
-					release["images"][entry.name] = blob
-				except Exception:
-					release["files"][entry.name] = blob
+					continue
+			# if mutagen was skipped or didn't open it as audio, try opening it as an image
+			try:
+				Image.open(entry_path).verify()
+				release["images"][entry.name] = blob
+			except Exception:
+				release["files"][entry.name] = blob
 	for ftype in release:
 		if ftype == {}:
 			release.pop(ftype)
