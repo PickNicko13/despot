@@ -1,10 +1,12 @@
 from despot.library import gen_release_list, scan_release, calc_stats
+from despot.whatever import wc_pad
 import json
 import time
-from os import path
+from os import path, get_terminal_size
+from sys import argv
 
 db = {}
-db["root"] = path.join(path.dirname(path.realpath(__file__)),'library')
+db["root"] = argv[1] if len(argv) > 1 else path.join(path.dirname(path.realpath(__file__)),'library')
 
 t = time.time()
 release_list = gen_release_list(db["root"])
@@ -12,8 +14,14 @@ print(f"release_list: {time.time()-t}")
 t = time.time()
 
 db["releases"] = {}
-for release in release_list:
-	print(f"scanning: '{release}'")
+for c, release in enumerate(release_list):
+	print(
+			wc_pad(
+				f"[{c+1}/{len(release_list)}] '{release}'",
+				get_terminal_size().columns
+			),
+			end='\r'
+	)
 	db["releases"][release] = scan_release(release)
 print(f"db['releases']: {time.time()-t}")
 t = time.time()

@@ -24,10 +24,11 @@ DEFAULT_CONFIG_PATH = path.join(path.realpath(__file__),'assets/default.json')
 DB_ROOT = path.expanduser('~/.local/share/despot')
 CONFIG_PATH = path.expanduser('~/.config/despot/config.json')
 VERSION = '0.1'
+OVERRIDDEN_FILE_EXTENSIONS = ('mid','midi','mov','webp')
 MUSIC_EXTENSIONS = { # TODO
-		"LOSSLESS": ['flac','alac','dsf','ape','tak'],
-		"LOSSY": ['mp3','opus','aac'],
-		"MIXED": ['wv','ac3', 'm4a', 'ogg', 'wma']
+		"LOSSLESS": ('flac','alac','dsf','ape','tak'),
+		"LOSSY": ('mp3','opus','aac'),
+		"MIXED": ('wv','ac3', 'm4a', 'ogg', 'wma')
 		}
 
 # disable zipbomb protection (which prevents large images from loading
@@ -145,6 +146,8 @@ def form_audio_blob(mutafile, entry_path):
 	elif tags is not None:
 		blob["embedded_image"] = len(mutafile.pictures) > 0 if hasattr(mutafile, 'pictures') else False
 		blob["tags"] = dict( tags.items() )
+	else:
+		raise Exception(f"Tag missing: {entry_path}")
 	blob["tags"] = dict( natsorted(blob["tags"].items()) )
 	return blob
 
@@ -176,18 +179,20 @@ def scan_release(release_path: str, mtime_only: bool = False) -> dict:
 			if mtime_only:
 				release[entry.name] = blob
 				continue
-			# try opening the file as audio
-			try:
-				mutafile = mutagen._file.File(entry_path)
-			except Exception:
-				mutafile = None
-				# it should return None if the file is not an audio file,
-				# so this is is highly unlikely, but, well, it's I/O
-				print(f"Mutagen error on {entry_path}.")
-			# if mutagen opened the file, treat it as music
-			if mutafile is not None:
-				blob.update( form_audio_blob(mutafile, entry_path) )
-				release["tracks"][entry.name] = blob
+			# do not try opening certain extensions with mutagen
+			if path.splitext(entry.name)[1].lower()[1:] not in OVERRIDDEN_FILE_EXTENSIONS:
+				# try opening the file as audio
+				try:
+					mutafile = mutagen._file.File(entry_path)
+				except Exception:
+					mutafile = None
+					# it should return None if the file is not an audio file,
+					# so this is is highly unlikely, but, well, it's I/O
+					print(f"Mutagen error on {entry_path}.")
+				# if mutagen opened the file, treat it as music
+				if mutafile is not None:
+					blob.update( form_audio_blob(mutafile, entry_path) )
+					release["tracks"][entry.name] = blob
 			# if mutagen didn't open it as audio, try opening it as an image
 			else:
 				try:
@@ -371,7 +376,7 @@ def calc_stats(releases: dict,
 					removesuffix('db').removesuffix('lufs') )
 				if db != float('inf'):
 					peak *= db_gain(db)
-					statistics["max_peak"]["track"] = max( peak, statistics["max_peak"]["track"] )
+					statistics["max_track_peak"] = max( peak, statistics["max_track_peak"] )
 			if ( "replaygain_album_peak" in tags.keys()
 					and "replaygain_album_gain" in tags.keys() ):
 				peak = float( tags["replaygain_album_peak"][0] )
@@ -379,7 +384,7 @@ def calc_stats(releases: dict,
 					removesuffix('db').removesuffix('lufs') )
 				if db != float('inf'):
 					peak *= db_gain(db)
-					statistics["max_peak"]["album"] = max( peak, statistics["max_peak"]["album"] )
+					statistics["max_album_peak"] = max( peak, statistics["max_album_peak"] )
 			# classify track as clipping if peak over 1
 			statistics["track_counts"]["clipping"] += (peak > 1.0)
 			# classify track as uploaded if links exist
