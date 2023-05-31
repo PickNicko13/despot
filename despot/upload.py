@@ -53,7 +53,35 @@ def prepare_thumbnail(img, path):
 	img = img.convert('RGB')
 	img.save(path, "jpeg", quality=77)
 
-
+# choose the "best" artwork based on filename
+def get_best_artwork(
+			images: list[str],
+			preferred_names: list[str],
+			preferred_exts: list[str]
+	):
+	preferred_image = None
+	max_score = float('-inf')
+	# loop through all images and find the highest score
+	for image_fname in images:
+		name_score = 0
+		extension_score = 0
+		name, ext = path.splitext(image_fname)
+		# Score based on name preferences
+		for index, preference in enumerate(preferred_names):
+			if preference == name.lower():
+				name_score = len(preferred_names) - index
+				break
+		# Score based on extension preferences
+		for index, preference in enumerate(preferred_exts):
+			if preference == ext.lower():
+				extension_score = len(preferred_exts) - index
+				break
+		image_score = name_score*1000 + extension_score
+		# Update the preferred item if the current item has a higher score
+		if image_score > max_score:
+			preferred_image = image_fname
+			max_score = image_score
+	return preferred_image
 
 # class Despot:
 # 	def __init__( self, api_id: str|None = None, api_hash: str|None = None ) -> None:
