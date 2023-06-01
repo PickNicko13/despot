@@ -2,6 +2,16 @@ from despot.library import *
 import os.path
 from icu import Transliterator
 from PIL import Image
+import subprocess
+from enum import Enum
+from r128gain.opusgain import \
+	write_oggopus_output_gain as write_opus_gain, \
+	parse_oggopus_output_gain as get_opus_gain
+from r128gain import float_to_q7dot8
+import mutagen.oggopus as mutagen_opus
+from math import log10
+from mutagen.flac import Picture
+from base64 import b64encode
 
 # don't break if an image is truncated
 #ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -11,6 +21,28 @@ Image.MAX_IMAGE_PIXELS = None
 
 # images are saved as jpegs with quality 77
 # it is because it looks like the telegram recompresses them with approximately this quality
+
+class RG_Mode(Enum):
+	NONE = 0		# remove existing ReplayGain tags and set header gain to 0 dB
+	REPLAYGAIN = 1	# save ReplayGain tags, convert R128 tags to ReplayGain, set header gain to 0 db
+	R128 = 2		# save R128 tags, convert ReplayGain tags to R128, set header gain to album gain
+
+class RG_Clip(Enum):
+	NONE = 0	# ignore clipping and let player handle it
+	ALBUM = 1	# lower the volume for all tracks in the release to preserve the album dynamics
+	TRACK = 2	# lower the volume for separate tracks
+
+RG_TAGLIST = (
+	'replaygain_album_peak',
+	'replaygain_track_peak',
+	'replaygain_album_gain',
+	'replaygain_track_gain',
+	'replaygain_album_range',
+	'replaygain_track_range',
+	'replaygain_reference_loudness'
+)
+R128_TAGLIST = ( 'r128_track_gain', 'r128_album_gain')
+MP3GAIN_TAGLIST = ( 'mp3gain_minmax', 'mp3gain_album_minmax', 'mp3gain_undo')
 
 # format the user-defined release format string with the appropriate data
 def format_release_string(release_string: str, release: dict, track_separator: str = '. ') -> str:
@@ -82,6 +114,111 @@ def get_best_artwork(
 			preferred_image = image_fname
 			max_score = image_score
 	return preferred_image
+
+# remove tag(s) from a mutagen opus representation safely
+def mutagen_safe_pop(muta: mutagen_opus.OggOpus, tags: tuple[str, ...]|str):
+	keys = muta.keys()
+	if isinstance(tags, list):
+		for tag in tags:
+			if tag in keys:
+				muta.pop(tag)
+	else:
+		if tags in keys:
+			muta.pop(tags)
+
+# encode track as opus with given parameters
+def encode_opus(
+			track_path: str,
+			out_path: str,
+			bitrate: int		= 96,
+			rg_mode: RG_Mode	= RG_Mode.NONE,
+			rg_clip: RG_Clip	= RG_Clip.NONE,
+			artwork: str|None	= None,
+			ffmpeg_path: str	= 'ffmpeg'
+	):
+	command = [
+			ffmpeg_path,
+			'-i',	track_path,
+			'-c:a',	'libopus',
+			'-b:a',	f'{bitrate}k',
+			out_path
+	]
+	if subprocess.run(command).returncode != 0:
+		raise Exception(f'Ffmpeg command exited with a non-zero return code. Command: {command}.')
+	# handle ReplayGain and R128
+	muta = mutagen_opus.Open(out_path)
+	if rg_mode == RG_Mode.NONE:
+		mutagen_safe_pop( muta, (*RG_TAGLIST, *R128_TAGLIST, *MP3GAIN_TAGLIST) )
+		muta.save()
+	elif rg_mode == RG_Mode.REPLAYGAIN:
+		if 'replaygain' not in [key[:10] for key in muta.keys()]:
+			if 'r128_track_gain' in muta.keys():
+				muta['replaygain_track_gain'] = [f"{muta['r128_track_gain'][0]/256 :.2f} LUFS"]
+			else:
+				raise Exception(f"Track gain information is missing in '{track_path}'.")
+			if 'r128_album_gain' in muta.keys():
+				muta['replaygain_album_gain'] = [f"{muta['r128_album_gain'][0]/256 :.2f} LUFS"]
+		mutagen_safe_pop( muta, (*R128_TAGLIST, *MP3GAIN_TAGLIST) )
+		# handle clipping prevention
+		if rg_clip == RG_Clip.TRACK:
+			compensated_peak = calc_compensated_peak(
+					float(muta['replaygain_track_peak'][0]),
+					muta['replaygain_track_gain'][0]
+			)
+			if compensated_peak > 1.0:
+				absgain = db_gain(float(muta['replaygain_track_gain'][0]
+							.lower().removesuffix('db').removesuffix('lufs')))
+				muta['replaygain_track_gain'] =	f'{20*log10(absgain/compensated_peak):.2f} LUFS'
+			# additionally compensate album gain (based on track peak)
+			if 'replaygain_album_gain' in muta.keys():
+				compensated_peak = calc_compensated_peak(
+						float(muta['replaygain_track_peak'][0]),
+						muta['replaygain_album_gain'][0]
+				)
+				if compensated_peak > 1.0:
+					absgain = db_gain(float(muta['replaygain_album_gain'][0]
+							.lower().removesuffix('db').removesuffix('lufs')))
+					muta['replaygain_album_gain'] =	f'{20*log10(absgain/compensated_peak):.2f} LUFS'
+		elif rg_clip == RG_Clip.ALBUM:
+			compensated_peak = calc_compensated_peak(
+					float(muta['replaygain_album_peak'][0]),
+					muta['replaygain_album_gain'][0]
+			)
+			if compensated_peak > 1.0:
+				# compensate track gain based on album peak
+				absgain = db_gain(float(muta['replaygain_track_gain'][0]
+							.lower().removesuffix('db').removesuffix('lufs')))
+				muta['replaygain_track_gain'] =	f'{20*log10(absgain/compensated_peak):.2f} LUFS'
+				# compensate album gain based on album peak
+				absgain = db_gain(float(muta['replaygain_album_gain'][0]
+							.lower().removesuffix('db').removesuffix('lufs')))
+				muta['replaygain_track_gain'] =	f'{20*log10(absgain/compensated_peak):.2f} LUFS'
+		muta.save()
+	elif rg_mode == RG_Mode.R128:
+		if 'r128_track_gain' not in muta.keys():
+			rg_track_gain = muta.get('replaygain_track_gain')
+			if rg_track_gain is not None:
+				db = float( rg_track_gain.lower().removesuffix('db').removesuffix('lufs') )
+				muta['r128_track_gain'] = float_to_q7dot8(db)
+			else:
+				raise Exception(f"Track gain information is missing in '{track_path}'.")
+		if 'r128_album_gain' not in muta.keys():
+			header_gain = 0
+			rg_album_gain = muta.get('replaygain_album_gain')
+			if rg_album_gain is not None:
+				db = float( rg_album_gain.lower().removesuffix('db').removesuffix('lufs') )
+				muta['r128_album_gain'] = 0
+				muta['r128_track_gain'] = float_to_q7dot8(muta['r128_track_gain']/256 - db)
+				muta.save()
+				write_opus_gain(open(out_path, 'r+b'), float_to_q7dot8(db))
+		mutagen_safe_pop( muta, (*RG_TAGLIST, *MP3GAIN_TAGLIST) )
+	# if given artwork, embed it
+	if artwork is not None:
+		img = Picture()
+		img.data = open(artwork, 'rb').read()
+		img.type = 3	# type 3 stands for cover art
+		muta['metadata_block_picture'] = b64encode(img.write()).decode('ascii')
+	muta.save()
 
 # class Despot:
 # 	def __init__( self, api_id: str|None = None, api_hash: str|None = None ) -> None:

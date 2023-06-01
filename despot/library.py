@@ -306,6 +306,14 @@ def find_multi_tag_releases(releases: dict, tag: str) -> list[str]:
 					break
 	return found
 
+# calculate compensated peak based on peak and gain tag strings
+def calc_compensated_peak(peak: float, gain_db: str) -> float:
+	db = float( gain_db.lower().removesuffix('db').removesuffix('lufs') )
+	if db != float('inf'):
+		return 0.
+	else:
+		return peak * db_gain(db)
+
 # find tracks which clip in either track or album gain mode
 # returns two dicts in such form:
 #	track_path: peak_value
@@ -317,22 +325,20 @@ def find_clipping_tracks(releases: dict) -> tuple[dict[str,float], dict[str,floa
 		for track_name, track in value["tracks"].items():
 			if ( "replaygain_track_peak" in track["tags"].keys()
 					and "replaygain_album_gain" in track["tags"].keys() ):
-				peak = float( track["tags"]["replaygain_album_peak"][0] )
-				db = float( track["tags"]["replaygain_album_gain"][0].lower().
-					removesuffix('db').removesuffix('lufs') )
-				if db != float('inf'):
-					peak *= db_gain(db)
-					if peak > 1:
-						clip_album[path.join(release_path,track_name)] = peak
+				peak = calc_compensated_peak(
+						float(track["tags"]["replaygain_album_peak"][0]),
+						track["tags"]["replaygain_album_gain"][0]
+				)
+				if peak > 1:
+					clip_album[path.join(release_path,track_name)] = peak
 			if ( "replaygain_track_peak" in track["tags"].keys()
 					and "replaygain_track_gain" in track["tags"].keys() ):
-				peak = float( track["tags"]["replaygain_track_peak"][0] )
-				db = float( track["tags"]["replaygain_track_gain"][0].lower().
-					removesuffix('db').removesuffix('lufs') )
-				if db != float('inf'):
-					peak *= db_gain(db)
-					if peak > 1:
-						clip_track[path.join(release_path,track_name)] = peak
+				peak = calc_compensated_peak(
+						float(track["tags"]["replaygain_track_peak"][0]),
+						track["tags"]["replaygain_track_gain"][0]
+				)
+				if peak > 1:
+					clip_track[path.join(release_path,track_name)] = peak
 	return ( dict(sorted(clip_track.items(), key=lambda x:x[1])),
 				dict(sorted(clip_album.items(), key=lambda x:x[1])) )
 
