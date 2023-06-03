@@ -13,16 +13,7 @@ import json
 from wcmatch import wcmatch
 import zstandard
 from datetime import datetime
-import time
 
-from io import BytesIO
-from pyrogram.client import Client
-import re
-import sys
-
-DEFAULT_CONFIG_PATH = path.join(path.realpath(__file__),'assets/default.json')
-DB_ROOT = path.expanduser('~/.local/share/despot')
-CONFIG_PATH = path.expanduser('~/.config/despot/config.json')
 VERSION = '0.1'
 OVERRIDDEN_FILE_EXTENSIONS = ('mid','midi','mov','webp')
 MUSIC_EXTENSIONS = { # TODO

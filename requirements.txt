@@ -6,4 +6,5 @@ tgcrypto
 uvloop
 wcmatch
 zstandard
-PyICU
+pyicu
+platformdirs
