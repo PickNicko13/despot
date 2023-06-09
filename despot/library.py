@@ -43,13 +43,13 @@ def db_gain(db: float):
 def save_db(db: dict, db_path: str):
 	makedirs(path.dirname(db_path), exist_ok=True)
 	with open(db_path, 'wb') as file:
-		file.write( zstandard.compress(json.dumps(db, ensure_ascii=False).encode()) )
+		file.write( zstandard.compress(json.dumps(db, ensure_ascii=False, indent='\t').encode()) )
 
 # a simple backup function
 def backup_db(db: dict, root: str):
 	makedirs(root, exist_ok=True)
 	with open(path.join(root,f"{datetime.today()}.zstd"), 'wb') as file:
-		file.write( zstandard.compress(json.dumps(db, ensure_ascii=False).encode()) )
+		file.write( zstandard.compress(json.dumps(db, ensure_ascii=False, indent='\t').encode()) )
 
 # split tag by slash
 def split_tags(tags: dict):
