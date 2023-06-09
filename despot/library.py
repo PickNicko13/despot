@@ -45,6 +45,11 @@ def save_db(db: dict, db_path: str):
 	with open(db_path, 'wb') as file:
 		file.write( zstandard.compress(json.dumps(db, ensure_ascii=False, indent='\t').encode()) )
 
+# a simple load function
+def load_db(db_path: str) -> dict:
+	with open(db_path, 'rb') as file:
+		return json.loads(zstandard.decompress(file.read()))
+
 # a simple backup function
 def backup_db(db: dict, root: str):
 	makedirs(root, exist_ok=True)
