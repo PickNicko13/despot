@@ -39,6 +39,12 @@ def comm(list1, list2):
 def db_gain(db: float):
 	return 10**(db/20)
 
+# a simple save function
+def save_db(db: dict, db_path: str):
+	makedirs(path.dirname(db_path), exist_ok=True)
+	with open(db_path, 'wb') as file:
+		file.write( zstandard.compress(json.dumps(db, ensure_ascii=False).encode()) )
+
 # a simple backup function
 def backup_db(db: dict, root: str):
 	makedirs(root, exist_ok=True)
