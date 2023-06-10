@@ -432,6 +432,11 @@ def calc_stats(releases: dict,
 			statistics["track_counts"]["artwork"]["embedded"]	+= embedded
 			statistics["track_counts"]["artwork"]["external"]	+= external
 			statistics["track_counts"]["artwork"]["both"]		+= embedded and external
+	# convert depth and rate keys to str
+	statistics["track_counts"]["depth"] = {str(k):v for k,v in statistics["track_counts"]["depth"].items()}
+	statistics["track_counts"]["rate"] = {str(k):v for k,v in statistics["track_counts"]["rate"].items()}
+
+
 	return statistics
 
 # get the list of not yet uploaded releases

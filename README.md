@@ -52,10 +52,10 @@ statistics: {               //precomputed statistical data
             critical:   int
             wanted:     int
         },
-        "artwork": {
-            "embedded":     int
-            "external":     int
-            "both":         int
+        artwork: {
+            embedded:   int
+            external:   int
+            both:       int
             # any: embedded+external-both
         }
     }
