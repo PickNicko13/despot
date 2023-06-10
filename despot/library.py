@@ -125,7 +125,7 @@ def form_audio_blob(mutafile):
 		blob["tags"] = dict( tags.items() )
 		split_tags(blob["tags"])
 	elif isinstance(tags, mutagen._vorbis.VCommentDict):
-		blob["embedded_image"] = ("tags_block_picture" in tags) \
+		blob["embedded_image"] = ("metadata_block_picture" in tags) \
 					or (len(mutafile.pictures) > 0 if hasattr(mutafile, 'pictures') else False)
 		blob["tags"] = dict( tags.items() )
 	elif isinstance(tags, mutagen.asf.ASFTags):
