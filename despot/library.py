@@ -70,7 +70,7 @@ def split_tags(tags: dict):
 			tags["totaldiscs"] = [disc_info[1]]
 
 # form a blob with audio file information
-def form_audio_blob(mutafile, entry_path):
+def form_audio_blob(mutafile):
 	info = mutafile.info
 	tags = mutafile.tags
 	blob = {}
@@ -87,7 +87,7 @@ def form_audio_blob(mutafile, entry_path):
 		# detect embedded image
 		blob["embedded_image"] = 'APIC:' in tags.keys()
 		# use EasyID3 to get the tags in humanly form
-		easy_tags = mutagen.easyid3.EasyID3(entry_path)
+		easy_tags = mutagen.easyid3.EasyID3(mutafile.filename)
 		blob["tags"] = dict( easy_tags.items() )
 		# then, try to split the tracknumber into tracknumber and totaltracks,
 		# since ID3 spec thinks that it's a god idea to save them together
@@ -119,9 +119,9 @@ def form_audio_blob(mutafile, entry_path):
 					blob["tags"][key] = [str(item.value)]
 	elif isinstance(tags, mutagen.mp4.MP4Tags):
 		blob["embedded_image"] = "covr" in tags
-		tags = mutagen.easymp4.EasyMP4(entry_path).tags
+		tags = mutagen.easymp4.EasyMP4(mutafile.filename).tags
 		if tags is None:
-			raise Exception(f"Could not open tags: '{entry_path}'")
+			raise Exception(f"Could not open tags: '{mutafile.filename}'")
 		blob["tags"] = dict( tags.items() )
 		split_tags(blob["tags"])
 	elif isinstance(tags, mutagen._vorbis.VCommentDict):
@@ -149,7 +149,7 @@ def form_audio_blob(mutafile, entry_path):
 		blob["embedded_image"] = len(mutafile.pictures) > 0 if hasattr(mutafile, 'pictures') else False
 		blob["tags"] = dict( tags.items() )
 	else:
-		raise Exception(f"Tag missing: {entry_path}")
+		raise Exception(f"Tag missing: {mutafile.filename}")
 	blob["tags"] = dict( natsorted(blob["tags"].items()) )
 	return blob
 
@@ -193,7 +193,7 @@ def scan_release(release_path: str, mtime_only: bool = False) -> dict:
 					print(f"Mutagen error on {entry_path}.")
 				# if mutagen opened the file, treat it as music
 				if mutafile is not None:
-					blob.update( form_audio_blob(mutafile, entry_path) )
+					blob.update( form_audio_blob(mutafile) )
 					release["tracks"][entry.name] = blob
 					continue
 			# if mutagen was skipped or didn't open it as audio, try opening it as an image
@@ -375,26 +375,27 @@ def calc_stats(releases: dict,
 			statistics["total_length"] += track["length"]
 			# init variables
 			tags = track["tags"]
-			peak = 0.0
+			track_peak = 0.0
 			# get peak values, compensate them for gain and save the max value
 			if ( "replaygain_track_peak" in tags.keys()
 					and "replaygain_track_gain" in tags.keys() ):
-				peak = float( tags["replaygain_track_peak"][0] )
+				track_peak = float( tags["replaygain_track_peak"][0] )
 				db = float( tags["replaygain_track_gain"][0].lower().
 					removesuffix('db').removesuffix('lufs') )
 				if db != float('inf'):
-					peak *= db_gain(db)
-					statistics["max_track_peak"] = max( peak, statistics["max_track_peak"] )
+					track_peak *= db_gain(db)
+					statistics["max_track_peak"] = max( track_peak, statistics["max_track_peak"] )
+			album_peak = 0.0
 			if ( "replaygain_album_peak" in tags.keys()
 					and "replaygain_album_gain" in tags.keys() ):
-				peak = float( tags["replaygain_album_peak"][0] )
+				album_peak = float( tags["replaygain_album_peak"][0] )
 				db = float( tags["replaygain_album_gain"][0].lower().
 					removesuffix('db').removesuffix('lufs') )
 				if db != float('inf'):
-					peak *= db_gain(db)
-					statistics["max_album_peak"] = max( peak, statistics["max_album_peak"] )
+					album_peak *= db_gain(db)
+					statistics["max_album_peak"] = max( album_peak, statistics["max_album_peak"] )
 			# classify track as clipping if peak over 1
-			statistics["track_counts"]["clipping"] += (peak > 1.0)
+			statistics["track_counts"]["clipping"] += (track_peak > 1.0) or (album_peak > 1.0)
 			# classify track as uploaded if links exist
 			if "link_orig" in track.keys():
 				statistics["track_counts"]["uploaded_orig"] += 1

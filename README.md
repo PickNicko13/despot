@@ -63,7 +63,7 @@ releases: {
         tracks: {
             *filename_N*: {
                 mtime:      float   //seconds since epoch to find modified files and directories
-                metadata:   {}
+                tags:   {}
                 length:     float   //length (seconds)
                 samples:    int     //length (samples)
                 depth:      int     //bit depth
