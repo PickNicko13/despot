@@ -361,6 +361,12 @@ def calc_stats(releases: dict,
 			"lacking_tags": {
 				"critical": 0,
 				"wanted": 0
+			},
+			"artwork": {
+				"embedded": 0,
+				"external": 0,
+				"both": 0
+				# any: embedded+external-both
 			}
 		}
 	}
@@ -420,6 +426,12 @@ def calc_stats(releases: dict,
 				statistics["track_counts"]["lacking_tags"]["critical"] += 1
 			if any( data not in tags.keys() for data in wanted_tags ):
 				statistics["track_counts"]["lacking_tags"]["wanted"] += 1
+			# classify tracks by the presence of artworks
+			embedded = track["embedded"]
+			external = hasattr(release,"images")
+			statistics["artwork"]["embedded"]	+= embedded
+			statistics["artwork"]["external"]	+= external
+			statistics["artwork"]["both"]		+= embedded and external
 	return statistics
 
 # get the list of not yet uploaded releases
