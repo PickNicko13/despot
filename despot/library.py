@@ -427,7 +427,7 @@ def calc_stats(releases: dict,
 			if any( data not in tags.keys() for data in wanted_tags ):
 				statistics["track_counts"]["lacking_tags"]["wanted"] += 1
 			# classify tracks by the presence of artworks
-			embedded = track["embedded"]
+			embedded = track["embedded_image"]
 			external = hasattr(release,"images")
 			statistics["artwork"]["embedded"]	+= embedded
 			statistics["artwork"]["external"]	+= external
