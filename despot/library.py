@@ -429,9 +429,9 @@ def calc_stats(releases: dict,
 			# classify tracks by the presence of artworks
 			embedded = track["embedded_image"]
 			external = hasattr(release,"images")
-			statistics["artwork"]["embedded"]	+= embedded
-			statistics["artwork"]["external"]	+= external
-			statistics["artwork"]["both"]		+= embedded and external
+			statistics["track_counts"]["artwork"]["embedded"]	+= embedded
+			statistics["track_counts"]["artwork"]["external"]	+= external
+			statistics["track_counts"]["artwork"]["both"]		+= embedded and external
 	return statistics
 
 # get the list of not yet uploaded releases

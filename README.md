@@ -51,6 +51,12 @@ statistics: {               //precomputed statistical data
         lacking_metadata: {
             critical:   int
             wanted:     int
+        },
+        "artwork": {
+            "embedded":     int
+            "external":     int
+            "both":         int
+            # any: embedded+external-both
         }
     }
 }
