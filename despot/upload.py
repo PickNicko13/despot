@@ -1,23 +1,15 @@
 from despot.library import *
 import os.path
 from icu import Transliterator
-from PIL import Image
 import subprocess
 from enum import Enum
 from r128gain.opusgain import \
-	write_oggopus_output_gain as write_opus_gain, \
-	parse_oggopus_output_gain as get_opus_gain
+	write_oggopus_output_gain as write_opus_gain
 from r128gain import float_to_q7dot8
 import mutagen.oggopus as mutagen_opus
 from math import log10
 from mutagen.flac import Picture
 from base64 import b64encode
-
-# don't break if an image is truncated
-#ImageFile.LOAD_TRUNCATED_IMAGES = True
-# disable zipbomb protection (which prevents large images from loading
-# and is not really a concern if it's in your own music library anyway)
-Image.MAX_IMAGE_PIXELS = None
 
 # images are saved as jpegs with quality 77
 # it is because it looks like the telegram recompresses them with approximately this quality
@@ -54,8 +46,9 @@ def format_release_string(release_string: str, release: dict, track_separator: s
 		'albumartist': get_tag_fom_first_track(release, 'albumartist'),
 		'date': get_tag_fom_first_track(release, 'date'),
 		'totaltracks': get_tag_fom_first_track(release, 'totaltracks'),
-		'depth_rates': set(f'{track["depth"]}/{track["rate"]}' for track in release["tracks"].values() )
+		'depth_rates': set(f'{track["depth"]}/{int(track["rate"])/1000}' for track in release["tracks"].values() )
 	}
+	formatting_data['depth_rates'] = ', '.join(formatting_data['depth_rates'])
 	latin_tracklist = ""
 	# stack up tracklist
 	for track in release["tracks"].values():
@@ -108,12 +101,37 @@ def get_best_artwork(
 			if preference == ext.lower():
 				extension_score = len(preferred_exts) - index
 				break
-		image_score = name_score*1000 + extension_score
+		image_score = name_score*len(preferred_exts) + extension_score
 		# Update the preferred item if the current item has a higher score
 		if image_score > max_score:
 			preferred_image = image_fname
 			max_score = image_score
 	return preferred_image
+
+# choose the "best" artwork based on filename, but probably more efficiently
+def optimized_artwork_search(
+			images: list[str],
+			preferred_names: list[str],
+			preferred_exts: list[str]
+	):
+	best_ext_images = []
+	# populate "best_ext_images" with artworks matching the best extension
+	for ext in preferred_exts:
+		for i in images:
+			if i.endswith(ext):
+				best_ext_images += i
+		if best_ext_images != []:
+			break
+	# if none of the listed extensions are present, add every image, as they're equally bad
+	if best_ext_images == []:
+		best_ext_images = images
+	# of all "best_ext_images" return the one closest to the top of the preferred names
+	for name in preferred_names:
+		for i in best_ext_images:
+			if i[:len(name)] == name:
+				return i
+	# if none of the "best_ext_images" matched any of the preferred names, return the first one
+	return best_ext_images[0]
 
 # remove tag(s) from a mutagen opus representation safely
 def mutagen_safe_pop(muta: mutagen_opus.OggOpus, tags: tuple[str, ...]|str):

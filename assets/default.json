@@ -1,5 +1,5 @@
 {
-	"formatting_string": "{albumartist} - {album} ({date}) [{depth_rates}]\nTracks: {totaltracks}{latin_tracklist}",
+	"formatting_string": "{albumartist} - {album} ({date}) [{depth_rates}]\nTracks:{totaltracks}{latin_tracklist}",
 	"delete_removed": false,
 	"delete_updated": false,
 	"opus": {

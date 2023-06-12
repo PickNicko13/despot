@@ -314,33 +314,25 @@ def calc_compensated_peak(peak: float, gain_db: str) -> float:
 	else:
 		return peak * db_gain(db)
 
-# find tracks which clip in either track or album gain mode
-# returns two dicts in such form:
+# generate peak dictionary in either track or album gain mode
+# returns a dict in such form:
 #	track_path: peak_value
-# first dict is for track compensated peaks, second is for the album compensated track peaks
-def find_clipping_tracks(releases: dict) -> tuple[dict[str,float], dict[str,float]]:
-	clip_album: dict = {}
-	clip_track: dict = {}
+def gen_peak_dict(releases: dict, album_mode: bool = True):
+	track_peaks = {}
+	if album_mode:
+		gain_tag = "replaygain_album_gain"
+	else:
+		gain_tag = "replaygain_track_gain"
 	for release_path, value in releases.items():
 		for track_name, track in value["tracks"].items():
 			if ( "replaygain_track_peak" in track["tags"].keys()
-					and "replaygain_album_gain" in track["tags"].keys() ):
+					and gain_tag in track["tags"].keys() ):
 				peak = calc_compensated_peak(
 						float(track["tags"]["replaygain_album_peak"][0]),
-						track["tags"]["replaygain_album_gain"][0]
+						track["tags"][gain_tag][0]
 				)
-				if peak > 1:
-					clip_album[path.join(release_path,track_name)] = peak
-			if ( "replaygain_track_peak" in track["tags"].keys()
-					and "replaygain_track_gain" in track["tags"].keys() ):
-				peak = calc_compensated_peak(
-						float(track["tags"]["replaygain_track_peak"][0]),
-						track["tags"]["replaygain_track_gain"][0]
-				)
-				if peak > 1:
-					clip_track[path.join(release_path,track_name)] = peak
-	return ( dict(sorted(clip_track.items(), key=lambda x:x[1])),
-				dict(sorted(clip_album.items(), key=lambda x:x[1])) )
+				track_peaks[path.join(release_path,track_name)] = peak
+	return dict(sorted(track_peaks.items(), key=lambda x:x[1]))
 
 # calculate statistics for the given database
 def calc_stats(releases: dict,
@@ -379,25 +371,23 @@ def calc_stats(releases: dict,
 			statistics["total_length"] += track["length"]
 			# init variables
 			tags = track["tags"]
-			track_peak = 0.0
+			album_peak = 0.
+			track_peak = 0.
 			# get peak values, compensate them for gain and save the max value
 			if ( "replaygain_track_peak" in tags.keys()
 					and "replaygain_track_gain" in tags.keys() ):
-				track_peak = float( tags["replaygain_track_peak"][0] )
-				db = float( tags["replaygain_track_gain"][0].lower().
-					removesuffix('db').removesuffix('lufs') )
-				if db != float('inf'):
-					track_peak *= db_gain(db)
-					statistics["max_track_peak"] = max( track_peak, statistics["max_track_peak"] )
-			album_peak = 0.0
+				track_peak = calc_compensated_peak(
+						float(track["tags"]["replaygain_track_peak"][0]),
+						track["tags"]["replaygain_track_gain"][0]
+				)
+				statistics["max_track_peak"] = max( track_peak, statistics["max_track_peak"] )
 			if ( "replaygain_album_peak" in tags.keys()
 					and "replaygain_album_gain" in tags.keys() ):
-				album_peak = float( tags["replaygain_album_peak"][0] )
-				db = float( tags["replaygain_album_gain"][0].lower().
-					removesuffix('db').removesuffix('lufs') )
-				if db != float('inf'):
-					album_peak *= db_gain(db)
-					statistics["max_album_peak"] = max( album_peak, statistics["max_album_peak"] )
+				album_peak = calc_compensated_peak(
+						float(track["tags"]["replaygain_track_peak"][0]),
+						track["tags"]["replaygain_album_gain"][0]
+				)
+				statistics["max_album_peak"] = max( album_peak, statistics["max_album_peak"] )
 			# classify track as clipping if peak over 1
 			statistics["track_counts"]["clipping"] += (track_peak > 1.0) or (album_peak > 1.0)
 			# classify track as uploaded if links exist
@@ -435,7 +425,6 @@ def calc_stats(releases: dict,
 	# convert depth and rate keys to str
 	statistics["track_counts"]["depth"] = {str(k):v for k,v in statistics["track_counts"]["depth"].items()}
 	statistics["track_counts"]["rate"] = {str(k):v for k,v in statistics["track_counts"]["rate"].items()}
-
 
 	return statistics
 
