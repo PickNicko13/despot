@@ -15,14 +15,14 @@ from base64 import b64encode
 # it is because it looks like the telegram recompresses them with approximately this quality
 
 class RG_Mode(Enum):
-	NONE = 0		# remove existing ReplayGain tags and set header gain to 0 dB
-	REPLAYGAIN = 1	# save ReplayGain tags, convert R128 tags to ReplayGain, set header gain to 0 db
-	R128 = 2		# save R128 tags, convert ReplayGain tags to R128, set header gain to album gain
+	NONE = 'None'					# remove existing ReplayGain tags and set header gain to 0 dB
+	REPLAYGAIN = 'ReplayGain 2.0'	# save ReplayGain tags, convert R128 tags to ReplayGain, set header gain to 0 db
+	R128 = 'R128'					# save R128 tags, convert ReplayGain tags to R128, set header gain to album gain
 
 class RG_Clip(Enum):
-	NONE = 0	# ignore clipping and let player handle it
-	ALBUM = 1	# lower the volume for all tracks in the release to preserve the album dynamics
-	TRACK = 2	# lower the volume for separate tracks
+	NONE = 'None'	# ignore clipping and let player handle it
+	ALBUM = 'Album'	# lower the volume for all tracks in the release to preserve the album dynamics
+	TRACK = 'Track'	# lower the volume for separate tracks
 
 RG_TAGLIST = (
 	'replaygain_album_peak',
