@@ -162,7 +162,7 @@ def gen_release_list(root: str) -> list[str]:
 			).match() ))
 
 # generate a release dict for the given directory
-def scan_release(release_path: str, mtime_only: bool = False, callback: Callable = lambda: None) -> dict:
+def scan_release(release_path: str, mtime_only: bool = False, callback: Callable = lambda arr: None) -> dict:
 	release = {} if mtime_only else {
 										"tracks": {},
 										"images": {},
@@ -227,7 +227,7 @@ def find_similar_release(releases: dict, release_src: dict) -> str|None:
 		return key[0]
 
 # returns tuple in such form: (deleted_releases, modified_releases, new_scans)
-def update_db(db: dict, trust_mtime: bool = True, callback: Callable = lambda: None) -> tuple[list[str],list[str],dict]:
+def update_db(db: dict, trust_mtime: bool = True, callback: Callable = lambda arr: None) -> tuple[list[str],list[str],dict]:
 	# generate fresh release list and get the old one
 	callback({
 			"operation": "generating release list"
@@ -251,7 +251,7 @@ def update_db(db: dict, trust_mtime: bool = True, callback: Callable = lambda: N
 					"scanned releases": scanned_releases,
 					"release": release
 			})
-			files = scan_release(release, mtime_only=True)
+			files = scan_release(release, mtime_only=True, callback=callback)
 			old_files = dict(
 					(name,{"mtime":data["mtime"]})
 					for filetype in ("tracks","images","files")
@@ -263,7 +263,7 @@ def update_db(db: dict, trust_mtime: bool = True, callback: Callable = lambda: N
 					"scanned releases": scanned_releases,
 					"release": release
 			})
-			files = scan_release(release)
+			files = scan_release(release, callback=callback)
 			old_files = dict(
 					(name,data)
 					for filetype in ("tracks","images","files")
