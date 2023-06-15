@@ -13,6 +13,7 @@ import json
 from wcmatch import wcmatch
 import zstandard
 from datetime import datetime
+from typing import Callable
 
 VERSION = '0.1'
 OVERRIDDEN_FILE_EXTENSIONS = ('mid','midi','mov','webp')
@@ -160,22 +161,31 @@ def gen_release_list(root: str) -> list[str]:
 			).match() ))
 
 # generate a release dict for the given directory
-def scan_release(release_path: str, mtime_only: bool = False) -> dict:
+def scan_release(release_path: str, mtime_only: bool = False, callback: Callable = lambda: None) -> dict:
 	release = {} if mtime_only else {
 										"tracks": {},
 										"images": {},
 										"files": {}
 									}
+	# count files for callback
+	total_files = sum([1 for entry in scandir(release_path) if entry.is_file(follow_symlinks=True)])
 	# scan each entry in the given directory
+	scanned_files = 0
 	for entry in natsorted(
 				scandir(release_path),
 				key=lambda x: (x.is_dir(), x.name.lower())
 		):
-		if entry.is_file():
+		if entry.is_file(follow_symlinks=True):
+			callback({
+					"file": path.join(entry.path, entry.name),
+					"total files": total_files,
+					"scanned files": scanned_files
+			})
+			scanned_files += 1
 			# init the object that will hold entry data representation (tags blob)
 			entry_path = path.join(release_path, entry.name)
 			blob: dict[str, str|float|list|dict] = { "mtime": path.getmtime(entry_path) }
-			# if scanning only for mtimes, use simplex method
+			# if scanning only for mtimes, use simpler method
 			if mtime_only:
 				release[entry.name] = blob
 				continue
@@ -216,8 +226,11 @@ def find_similar_release(releases: dict, release_src: dict) -> str|None:
 		return key[0]
 
 # returns tuple in such form: (deleted_releases, modified_releases, new_scans)
-def update_db(db: dict, trust_mtime: bool = True) -> tuple[list[str],list[str],dict]:
+def update_db(db: dict, trust_mtime: bool = True, callback: Callable = lambda: None) -> tuple[list[str],list[str],dict]:
 	# generate fresh release list and get the old one
+	callback({
+			"operation": "generating release list"
+	})
 	release_list = gen_release_list(db["root"])
 	old_release_list = db["releases"].keys()
 	# init new lists
@@ -226,8 +239,15 @@ def update_db(db: dict, trust_mtime: bool = True) -> tuple[list[str],list[str],d
 	new_releases, deleted_releases, modified_releases = comm(release_list, old_release_list)
 	unmodified_releases = []
 	# detect new and remove unmodified releases from "modified_releases"
+	scanned_releases = 0
 	for release in modified_releases:
 		if trust_mtime:
+			callback({
+					"operation": "scanning release",
+					"release count": len(modified_releases),
+					"scanned releases": scanned_releases,
+					"release": release
+			})
 			files = scan_release(release, mtime_only=True)
 			old_files = dict(
 					(name,{"mtime":data["mtime"]})
@@ -235,12 +255,19 @@ def update_db(db: dict, trust_mtime: bool = True) -> tuple[list[str],list[str],d
 					for name,data in db["releases"][release][filetype].items()
 			)
 		else:
+			callback({
+					"operation": "scanning release",
+					"release count": len(modified_releases),
+					"scanned releases": scanned_releases,
+					"release": release
+			})
 			files = scan_release(release)
 			old_files = dict(
 					(name,data)
 					for filetype in ("tracks","images","files")
 					for name,data in db["releases"][release][filetype].items()
 			)
+		scanned_releases += 1
 		# if file list and corresponding data is the same,
 		# release hasn't changed, so remove it from modified
 		if files == old_files:
@@ -255,7 +282,12 @@ def update_db(db: dict, trust_mtime: bool = True) -> tuple[list[str],list[str],d
 	### at this point all the release data is correct and usable
 	# try finding "new" releases exactly the same as a "deleted" releases
 	delete = {}
-	for release in deleted_releases:
+	for release_number, release in enumerate(deleted_releases):
+		callback({
+				"operation": "searching for moved releases",
+				"release count": len(deleted_releases),
+				"scanned releases": release_number-1
+		})
 		key = find_similar_release(new_scans, db["releases"][release])
 		if key is not None:
 			delete[key] = release
@@ -265,6 +297,9 @@ def update_db(db: dict, trust_mtime: bool = True) -> tuple[list[str],list[str],d
 		new_scans.pop(key)
 		print(f"Moved '{release}' to '{key}'")
 	db["releases"].update(new_scans)
+	callback({
+			"operation": "calculating statistics"
+	})
 	db["statistics"] = calc_stats(db["releases"])
 	return deleted_releases, modified_releases, new_scans
 
