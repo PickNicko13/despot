@@ -14,6 +14,7 @@ from wcmatch import wcmatch
 import zstandard
 from datetime import datetime
 from typing import Callable
+from time import time
 
 VERSION = '0.1'
 OVERRIDDEN_FILE_EXTENSIONS = ('mid','midi','mov','webp')
@@ -240,10 +241,12 @@ def update_db(db: dict, trust_mtime: bool = True, callback: Callable = lambda: N
 	unmodified_releases = []
 	# detect new and remove unmodified releases from "modified_releases"
 	scanned_releases = 0
+	callback({
+			"operation": "scanning release"
+	})
 	for release in modified_releases:
 		if trust_mtime:
 			callback({
-					"operation": "scanning release",
 					"release count": len(modified_releases),
 					"scanned releases": scanned_releases,
 					"release": release
@@ -256,7 +259,6 @@ def update_db(db: dict, trust_mtime: bool = True, callback: Callable = lambda: N
 			)
 		else:
 			callback({
-					"operation": "scanning release",
 					"release count": len(modified_releases),
 					"scanned releases": scanned_releases,
 					"release": release
@@ -301,6 +303,7 @@ def update_db(db: dict, trust_mtime: bool = True, callback: Callable = lambda: N
 			"operation": "calculating statistics"
 	})
 	db["statistics"] = calc_stats(db["releases"])
+	db["update_time"] = time()
 	return deleted_releases, modified_releases, new_scans
 
 # find a list of tracks lacking tags
