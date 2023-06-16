@@ -61,7 +61,7 @@ statistics: {               //precomputed statistical data
     }
 }
 last_uploaded_track: {      //path to last uploaded tracks
-    normal:         str
+    original:       str
     opus:           str
 }
 releases: {

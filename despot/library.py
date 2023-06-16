@@ -483,23 +483,14 @@ def get_not_uploaded_releases(releases: dict) -> dict[str,dict[str,list|str|None
 			}
 	}
 	for release_name, release in releases.items():
-		if 'id_orig' not in release.keys():
-			return_data['orig']['not_uploaded'].append(release_name)
-			continue
-		for track in release['tracks']:
-			if 'id_orig' not in track.keys():
-				if return_data['orig']['last'] is not None:
-					raise Exception("Database was damaged - more than one release in progress.")
-				return_data['orig']['last'] = release_name
-				continue
-		if 'id_opus' not in release.keys():
-			return_data['opus']['not_uploaded'].append(release_name)
-			continue
-		for track in release['tracks']:
-			if 'id_opus' not in track.keys():
-				if return_data['opus']['last'] is not None:
-					raise Exception("Database was damaged - more than one release in progress.")
-				return_data['opus']['last'] = release_name
+		for channel_type in ['orig','opus']:
+			if 'id_'+channel_type  not in release.keys():
+				return_data[channel_type]['not_uploaded'].append(release_name)
+				if 'link_'+channel_type in release.keys():
+					if return_data[channel_type]['last'] is None:
+						return_data[channel_type]['last'] = release_name
+					else:
+						raise Exception("Database was damaged - more than one release in progress.")
 				continue
 	return return_data
 
