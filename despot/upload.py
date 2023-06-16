@@ -7,9 +7,9 @@ from r128gain.opusgain import \
 	write_oggopus_output_gain as write_opus_gain
 from r128gain import float_to_q7dot8
 import mutagen.oggopus as mutagen_opus
-from math import log10
 from mutagen.flac import Picture
-from base64 import b64encode
+from math import log10
+from base64 import b64encode, b64decode
 
 # images are saved as jpegs with quality 77
 # it is because it looks like the telegram recompresses them with approximately this quality
@@ -84,7 +84,7 @@ def get_best_artwork(
 			preferred_names: list[str],
 			preferred_exts: list[str]
 	):
-	preferred_image = None
+	preferred_image = ''
 	max_score = float('-inf')
 	# loop through all images and find the highest score
 	for image_fname in images:
@@ -237,3 +237,33 @@ def encode_opus(
 		img.type = 3	# type 3 stands for cover art
 		muta['metadata_block_picture'] = b64encode(img.write()).decode('ascii')
 	muta.save()
+
+def extract_embedded_image(src: str, out: str):
+	mutafile = mutagen._file.File(src)
+	if mutafile is None:
+		raise Exception(f'Couldn\'t open {src} using mutagen')
+	tags = mutafile.tags
+	if isinstance(tags, mutagen.id3.ID3):
+		open(out, 'wb').write(tags.get('APIC:').data)
+	elif isinstance(tags, mutagen.apev2.APEv2):
+		for name, value in tags.items():
+			if name.lower().startswith("cover art") and value.kind == mutagen.apev2.BINARY:
+				open(out, 'wb').write( value.value.split(b'\0', 1)[1] )
+				return
+		raise Exception(f"Embeded image missing in: {src}")
+	elif isinstance(tags, mutagen.mp4.MP4Tags):
+		open(out, 'wb').write( tags.get('covr')[0] )
+	elif isinstance(tags, mutagen._vorbis.VCommentDict):
+		if ("metadata_block_picture" in tags):
+			data = Picture( b64decode(tags.get('metadata_block_picture')[0]) ).data
+		elif hasattr(mutafile, 'pictures') and len(mutafile.pictures) > 0:
+			data = mutafile.pictures[0].data
+		else:
+			raise Exception(f"Embeded image missing in: {src}")
+		open(out,'wb').write( data )
+	elif isinstance(tags, mutagen.asf.ASFTags):
+		if "WM/Picture" in tags
+		v = tags.get('WM/Picture')[0].value
+		open(out,'wb').write( v[v.find(255):] )
+	else:
+		raise Exception(f"Embeded image missing in: {src}")
