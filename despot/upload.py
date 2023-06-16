@@ -262,8 +262,5 @@ def extract_embedded_image(src: str, out: str):
 			raise Exception(f"Embeded image missing in: {src}")
 		open(out,'wb').write( data )
 	elif isinstance(tags, mutagen.asf.ASFTags):
-		if "WM/Picture" in tags
 		v = tags.get('WM/Picture')[0].value
 		open(out,'wb').write( v[v.find(255):] )
-	else:
-		raise Exception(f"Embeded image missing in: {src}")
