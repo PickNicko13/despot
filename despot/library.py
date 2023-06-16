@@ -102,7 +102,10 @@ def form_audio_blob(mutafile):
 	# Another quirk is that their keys are case-sensitive, but it is strongly advised to
 	# never use keys which only differ in case.
 	elif isinstance(tags, mutagen.apev2.APEv2):
-		blob["embedded_image"] = "cover art (front)" in tags
+		blob["embedded_image"] = any(
+				k.lower().startswith("cover art") and v.kind == mutagen.apev2.BINARY
+				for k,v in tags.items()
+		)
 		blob["tags"] = {}
 		for key, item in tags.items():
 			key = key.lower()
@@ -218,10 +221,10 @@ def scan_release(release_path: str, mtime_only: bool = False, callback: Callable
 
 def find_similar_release(releases: dict, release_src: dict) -> str|None:
 	release = release_src
-	if 'link_orig' in release.keys():
-		release.pop('link_orig')
-	if 'link_opus' in release.keys():
-		release.pop('link_opus')
+	if 'id_orig' in release.keys():
+		release.pop('id_orig')
+	if 'id_opus' in release.keys():
+		release.pop('id_opus')
 	key = [k for k, v in releases.items() if v == release]
 	if len(key) == 1:
 		return key[0]
@@ -428,10 +431,10 @@ def calc_stats(releases: dict,
 				statistics["max_album_peak"] = max( album_peak, statistics["max_album_peak"] )
 			# classify track as clipping if peak over 1
 			statistics["track_counts"]["clipping"] += (track_peak > 1.0) or (album_peak > 1.0)
-			# classify track as uploaded if links exist
-			if "link_orig" in track.keys():
+			# classify track as uploaded if IDs exist
+			if "id_orig" in track.keys():
 				statistics["track_counts"]["uploaded_orig"] += 1
-			if "link_opus" in track.keys():
+			if "id_opus" in track.keys():
 				statistics["track_counts"]["uploaded_opus"] += 1
 			# classify track by extension
 			ext = path.splitext(track_name)[1].lower()
@@ -480,20 +483,20 @@ def get_not_uploaded_releases(releases: dict) -> dict[str,dict[str,list|str|None
 			}
 	}
 	for release_name, release in releases.items():
-		if 'link_orig' not in release.keys():
+		if 'id_orig' not in release.keys():
 			return_data['orig']['not_uploaded'].append(release_name)
 			continue
 		for track in release['tracks']:
-			if 'link_orig' not in track.keys():
+			if 'id_orig' not in track.keys():
 				if return_data['orig']['last'] is not None:
 					raise Exception("Database was damaged - more than one release in progress.")
 				return_data['orig']['last'] = release_name
 				continue
-		if 'link_opus' not in release.keys():
+		if 'id_opus' not in release.keys():
 			return_data['opus']['not_uploaded'].append(release_name)
 			continue
 		for track in release['tracks']:
-			if 'link_opus' not in track.keys():
+			if 'id_opus' not in track.keys():
 				if return_data['opus']['last'] is not None:
 					raise Exception("Database was damaged - more than one release in progress.")
 				return_data['opus']['last'] = release_name
