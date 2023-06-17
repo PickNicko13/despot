@@ -293,6 +293,7 @@ def send_track(
 		callback: Callable = lambda: None
 	):
 	track = release['tracks'][track_filename]
+	callback(operation="Preparing track thumbnail")
 	# find best image
 	if track['embedded_image']:
 		extract_embedded_image(path.join(release_path,track_filename), path.join(tmp_dir,'track_thumbnail.jpg'))
@@ -304,7 +305,7 @@ def send_track(
 		thumb_file = fallback_thumbnail
 	track_path = path.join(release_path,track_filename)
 	if isinstance(opus_settings, dict):
-		callback(operation='Encoding', track=track_filename)
+		callback(operation='Encoding')
 		encode_opus(
 				track_path,
 				path.join(tmp_dir,'track.opus'),
@@ -322,7 +323,7 @@ def send_track(
 			performer=' | '.join(track['tags']['artist']),
 			title=track['tags']['title'][0],
 			thumb=thumb_file,
-			progress=callback
+			progress=(lambda current,total: callback(operation='Sending', current=current, total=total))
 	)
 	if isinstance(msg, pyrogram.types.Message):
 		if isinstance(opus_settings, dict):
@@ -358,7 +359,7 @@ def upload_release(
 		short_type = 'orig'
 	id_field = 'id_'+short_type
 	link_field = 'link_'+short_type
-	callback(operation="Preparing images")
+	callback(operation="Preparing release images")
 	# detect best image
 	if len(release['images']) > 0:
 		best_image = Image.open(get_best_artwork(release['images'], preferred_names, preferred_exts))
@@ -381,7 +382,8 @@ def upload_release(
 					tmp_dir,
 					path.join(assets_dir, 'fallback_thumbnail.jpg'),
 					opus_settings,
-					lambda current, total: callback(operation="Sending", track=filename, current=current, total=total),
+					lambda operation, current=None, total=None:
+						callback(operation=operation, track=filename, current=current, total=total),
 			)
 		remove_release_links(release, link_field)
 	# if release message has not been uploaded yet, send the first message and upload the tracks
@@ -419,8 +421,10 @@ def upload_release(
 						tmp_dir,
 						path.join(assets_dir, 'fallback_thumbnail.jpg'),
 						opus_settings,
-						lambda current, total: callback(operation="Sending", track=filename, current=current, total=total),
+						lambda operation, current=None, total=None:
+							callback(operation=operation, track=filename, current=current, total=total),
 				)
+				callback(operation='Track sent successfully')
 			# after finishing the full release upload, clean up the links
 			remove_release_links(release, link_field)
 		else:
