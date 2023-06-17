@@ -1,8 +1,9 @@
 from despot.library import *
 import os.path
-from icu import Transliterator
+from icu._icu_ import Transliterator
 import subprocess
 from enum import Enum
+from shutil import copyfile
 from r128gain.opusgain import \
 	write_oggopus_output_gain as write_opus_gain
 from r128gain import float_to_q7dot8
@@ -10,6 +11,8 @@ import mutagen.oggopus as mutagen_opus
 from mutagen.flac import Picture
 from math import log10
 from base64 import b64encode, b64decode
+from pyrogram.client import Client
+import pyrogram.types
 
 # images are saved as jpegs with quality 77
 # it is because it looks like the telegram recompresses them with approximately this quality
@@ -244,7 +247,11 @@ def extract_embedded_image(src: str, out: str):
 		raise Exception(f'Couldn\'t open {src} using mutagen')
 	tags = mutafile.tags
 	if isinstance(tags, mutagen.id3.ID3):
-		open(out, 'wb').write(tags.get('APIC:').data)
+		apic = tags.get('APIC:')
+		if apic is None:
+			raise Exception(f'Track {src} contains no embedded image')
+		else:
+			open(out, 'wb').write(apic.data)
 	elif isinstance(tags, mutagen.apev2.APEv2):
 		for name, value in tags.items():
 			if name.lower().startswith("cover art") and value.kind == mutagen.apev2.BINARY:
@@ -252,15 +259,169 @@ def extract_embedded_image(src: str, out: str):
 				return
 		raise Exception(f"Embeded image missing in: {src}")
 	elif isinstance(tags, mutagen.mp4.MP4Tags):
-		open(out, 'wb').write( tags.get('covr')[0] )
+		covr = tags.get('covr')
+		if covr is None:
+			raise Exception(f'Track {src} contains no embedded image')
+		else:
+			open(out, 'wb').write( covr[0] )
 	elif isinstance(tags, mutagen._vorbis.VCommentDict):
 		if ("metadata_block_picture" in tags):
-			data = Picture( b64decode(tags.get('metadata_block_picture')[0]) ).data
+			data = Picture( b64decode(tags['metadata_block_picture'][0]) ).data
 		elif hasattr(mutafile, 'pictures') and len(mutafile.pictures) > 0:
 			data = mutafile.pictures[0].data
 		else:
 			raise Exception(f"Embeded image missing in: {src}")
 		open(out,'wb').write( data )
 	elif isinstance(tags, mutagen.asf.ASFTags):
-		v = tags.get('WM/Picture')[0].value
-		open(out,'wb').write( v[v.find(255):] )
+		pic_tag = tags.get('WM/Picture')
+		if pic_tag is None:
+			raise Exception(f'Track {src} contains no embedded image')
+		else:
+			v = pic_tag[0].value
+			open(out,'wb').write( v[v.find(255):] )
+
+def send_track(
+		client: Client,
+		release: dict,
+		track_filename: str,
+		release_path: str,
+		album_thumbnail: bool,
+		channel: str,
+		tmp_dir: str,
+		fallback_thumbnail: str,
+		opus_settings: dict|None,
+		callback: Callable = lambda: None
+	):
+	track = release['tracks'][track_filename]
+	# find best image
+	if track['embedded_image']:
+		extract_embedded_image(path.join(release_path,track_filename), path.join(tmp_dir,'track_thumbnail.jpg'))
+		prepare_artwork(path.join(tmp_dir,'track_thumbnail.jpg'),path.join(tmp_dir,'track_thumbnail.jpg'))
+		thumb_file = path.join(tmp_dir,'track_thumbnail.jpg')
+	elif album_thumbnail:
+		thumb_file = path.join(tmp_dir,'album_thumbnail.jpg')
+	else:
+		thumb_file = fallback_thumbnail
+	track_path = path.join(release_path,track_filename)
+	if isinstance(opus_settings, dict):
+		callback(operation='Encoding', track=track_filename)
+		encode_opus(
+				track_path,
+				path.join(tmp_dir,'track.opus'),
+				bitrate=opus_settings['bitrate'],
+				rg_mode=opus_settings['replaygain']['mode'],
+				rg_clip=opus_settings['replaygain']['clipping_policy'],
+				artwork=thumb_file
+		)
+		track_path = path.join(tmp_dir,'track.opus')
+	# send track
+	msg = client.send_audio(
+			channel,
+			path.join(release_path,track_filename),
+			duration=int(track['length']),
+			performer=' | '.join(track['tags']['artist']),
+			title=track['tags']['title'][0],
+			thumb=thumb_file,
+			progress=callback
+	)
+	if isinstance(msg, pyrogram.types.Message):
+		if isinstance(opus_settings, dict):
+			release['tracks'][track_filename]['id_opus'] = msg.id
+			release['tracks'][track_filename]['link_opus'] = msg.link
+		else:
+			release['tracks'][track_filename]['id_orig'] = msg.id
+			release['tracks'][track_filename]['link_orig'] = msg.link
+	else:
+		raise Exception(f'Couldn\'t upload {path.join(release_path,track_filename)}.')
+
+def remove_release_links(release: dict, link_field: str):
+	release.pop(link_field)
+	for track in release['tracks']:
+		track.pop(link_field)
+
+def upload_release(
+		release: dict,
+		release_path: str,
+		client: Client,
+		channel: str,
+		tmp_dir: str,
+		assets_dir: str,
+		release_string: str,
+		preferred_names: list[str],
+		preferred_exts: list[str],
+		opus_settings: dict|None,
+		callback: Callable
+	):
+	if isinstance(opus_settings, dict):
+		short_type = 'opus'
+	else:
+		short_type = 'orig'
+	id_field = 'id_'+short_type
+	link_field = 'link_'+short_type
+	callback(operation="Preparing images")
+	# detect best image
+	if len(release['images']) > 0:
+		best_image = Image.open(get_best_artwork(release['images'], preferred_names, preferred_exts))
+		album_thumbnail = True
+		prepare_thumbnail(best_image, path.join(tmp_dir,'album_thumbnail.jpg'))
+	else:
+		best_image = None
+		album_thumbnail = False
+	# uploading stage
+	# if release message was already uploaded, proceed to upload the missing tracks
+	if id_field in release.keys():
+		for filename,track in dict(natsorted((k,v) for k,v in release['tracks'].items() if id_field not in v)):
+			send_track(
+					client,
+					release,
+					filename,
+					release_path,
+					album_thumbnail,
+					channel,
+					tmp_dir,
+					path.join(assets_dir, 'fallback_thumbnail.jpg'),
+					opus_settings,
+					lambda current, total: callback(operation="Sending", track=filename, current=current, total=total),
+			)
+		remove_release_links(release, link_field)
+	# if release message has not been uploaded yet, send the first message and upload the tracks
+	else:
+		# release message
+		# artwork preparation
+		if best_image is not None:
+			prepare_artwork(best_image, path.join(tmp_dir,'album_artwork.jpg'))
+		elif any( [track['embedded_image'] for track in release['tracks']] ):
+			for filename,track in release['tracks'].items():
+				if track['embedded_image']:
+					extract_embedded_image(path.join(release_path,filename), path.join(tmp_dir,'album_artwork.jpg'))
+					prepare_artwork(path.join(tmp_dir,'album_artwork.jpg'), path.join(tmp_dir,'album_artwork.jpg'))
+					break
+		else:
+			copyfile(path.join(assets_dir,'fallback_artwork.jpg'), path.join(tmp_dir,'album_artwork.jpg'))
+		# send release message
+		msg = client.send_photo(
+				channel,
+				path.join(tmp_dir,'album_artwork.jpg'),
+				caption=format_release_string(release_string, release)
+		)
+		# if release message sent successfully, proceed to sending the tracks
+		if isinstance(msg, pyrogram.types.Message):
+			release[id_field] = msg.id
+			release[link_field] = msg.id
+			for filename in release['tracks'].keys():
+				send_track(
+						client,
+						release,
+						filename,
+						release_path,
+						album_thumbnail,
+						channel,
+						tmp_dir,
+						path.join(assets_dir, 'fallback_thumbnail.jpg'),
+						opus_settings,
+						lambda current, total: callback(operation="Sending", track=filename, current=current, total=total),
+				)
+			# after finishing the full release upload, clean up the links
+			remove_release_links(release, link_field)
+		else:
+			raise Exception(f'Couldn\'t upload {release_path}.')

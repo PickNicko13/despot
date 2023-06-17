@@ -485,13 +485,13 @@ def get_not_uploaded_releases(releases: dict) -> dict[str,dict[str,list|str|None
 	for release_name, release in releases.items():
 		for channel_type in ['orig','opus']:
 			if 'id_'+channel_type  not in release.keys():
-				return_data[channel_type]['not_uploaded'].append(release_name)
 				if 'link_'+channel_type in release.keys():
 					if return_data[channel_type]['last'] is None:
 						return_data[channel_type]['last'] = release_name
 					else:
 						raise Exception("Database was damaged - more than one release in progress.")
-				continue
+					continue
+				return_data[channel_type]['not_uploaded'].append(release_name)
 	return return_data
 
 # get list of releases with embedded images
