@@ -1,4 +1,4 @@
-from despot.library import *
+from library import *
 import os.path
 from icu._icu_ import Transliterator
 import subprocess
@@ -392,7 +392,7 @@ def upload_release(
 		# artwork preparation
 		if best_image is not None:
 			prepare_artwork(best_image, path.join(tmp_dir,'album_artwork.jpg'))
-		elif any( [track['embedded_image'] for track in release['tracks']] ):
+		elif any( [track['embedded_image'] for track in release['tracks'].values()] ):
 			for filename,track in release['tracks'].items():
 				if track['embedded_image']:
 					extract_embedded_image(path.join(release_path,filename), path.join(tmp_dir,'album_artwork.jpg'))
