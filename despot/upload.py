@@ -280,7 +280,7 @@ def extract_embedded_image(src: str, out: str):
 			v = pic_tag[0].value
 			open(out,'wb').write( v[v.find(255):] )
 
-def send_track(
+async def send_track(
 		client: Client,
 		release: dict,
 		track_filename: str,
@@ -316,7 +316,7 @@ def send_track(
 		)
 		track_path = path.join(tmp_dir,'track.opus')
 	# send track
-	msg = client.send_audio(
+	msg = await client.send_audio(
 			channel,
 			path.join(release_path,track_filename),
 			duration=int(track['length']),
@@ -340,7 +340,7 @@ def remove_release_links(release: dict, link_field: str):
 	for track in release['tracks'].values():
 		track.pop(link_field)
 
-def upload_release(
+async def upload_release(
 		release: dict,
 		release_path: str,
 		client: Client,
@@ -372,7 +372,7 @@ def upload_release(
 	# if release message was already uploaded, proceed to upload the missing tracks
 	if id_field in release.keys():
 		for filename,track in dict(natsorted((k,v) for k,v in release['tracks'].items() if id_field not in v)):
-			send_track(
+			await send_track(
 					client,
 					release,
 					filename,
@@ -401,7 +401,7 @@ def upload_release(
 		else:
 			copyfile(path.join(assets_dir,'fallback_artwork.jpg'), path.join(tmp_dir,'album_artwork.jpg'))
 		# send release message
-		msg = client.send_photo(
+		msg = await client.send_photo(
 				channel,
 				path.join(tmp_dir,'album_artwork.jpg'),
 				caption=format_release_string(release_string, release)
@@ -411,7 +411,7 @@ def upload_release(
 			release[id_field] = msg.id
 			release[link_field] = msg.id
 			for filename in release['tracks'].keys():
-				send_track(
+				await send_track(
 						client,
 						release,
 						filename,
@@ -424,17 +424,17 @@ def upload_release(
 						lambda operation, current=None, total=None:
 							callback(operation=operation, track=filename, current=current, total=total),
 				)
-				callback(operation='Track sent successfully')
+				callback(operation='Track sent successfully', track=filename)
 			# after finishing the full release upload, clean up the links
 			remove_release_links(release, link_field)
 		else:
 			raise Exception(f'Couldn\'t upload {release_path}.')
 
-def delete_release_from_telegram(release: dict, client: Client, channel: str, id_tag: str):
+async def delete_release_from_telegram(release: dict, client: Client, channel: str, id_tag: str):
 	for filetype in ['tracks','images','files']:
 		for filename, file in release[filetype].items():
 			if id_tag in file.keys():
-				result = client.delete_messages(channel, file[id_tag])
+				result = await client.delete_messages(channel, file[id_tag])
 				if isinstance(result,int):
 					file.pop(id_tag)
 				else:
