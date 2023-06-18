@@ -296,11 +296,11 @@ def send_track(
 	callback(operation="Preparing track thumbnail")
 	# find best image
 	if track['embedded_image']:
-		extract_embedded_image(path.join(release_path,track_filename), path.join(tmp_dir,'track_thumbnail.jpg'))
-		prepare_artwork(path.join(tmp_dir,'track_thumbnail.jpg'),path.join(tmp_dir,'track_thumbnail.jpg'))
-		thumb_file = path.join(tmp_dir,'track_thumbnail.jpg')
+		extract_embedded_image(path.join(release_path,track_filename), path.join(tmp_dir,'track_thumb.jpg'))
+		prepare_artwork(path.join(tmp_dir,'track_thumb.jpg'),path.join(tmp_dir,'track_thumb.jpg'))
+		thumb_file = path.join(tmp_dir,'track_thumb.jpg')
 	elif album_thumbnail:
-		thumb_file = path.join(tmp_dir,'album_thumbnail.jpg')
+		thumb_file = path.join(tmp_dir,'album_thumb.jpg')
 	else:
 		thumb_file = fallback_thumbnail
 	track_path = path.join(release_path,track_filename)
@@ -337,7 +337,7 @@ def send_track(
 
 def remove_release_links(release: dict, link_field: str):
 	release.pop(link_field)
-	for track in release['tracks']:
+	for track in release['tracks'].values():
 		track.pop(link_field)
 
 def upload_release(
@@ -364,7 +364,7 @@ def upload_release(
 	if len(release['images']) > 0:
 		best_image = Image.open(get_best_artwork(release['images'], preferred_names, preferred_exts))
 		album_thumbnail = True
-		prepare_thumbnail(best_image, path.join(tmp_dir,'album_thumbnail.jpg'))
+		prepare_thumbnail(best_image, path.join(tmp_dir,'album_thumb.jpg'))
 	else:
 		best_image = None
 		album_thumbnail = False
@@ -380,7 +380,7 @@ def upload_release(
 					album_thumbnail,
 					channel,
 					tmp_dir,
-					path.join(assets_dir, 'fallback_thumbnail.jpg'),
+					path.join(assets_dir, 'fallback_thumb.jpg'),
 					opus_settings,
 					lambda operation, current=None, total=None:
 						callback(operation=operation, track=filename, current=current, total=total),
@@ -419,7 +419,7 @@ def upload_release(
 						album_thumbnail,
 						channel,
 						tmp_dir,
-						path.join(assets_dir, 'fallback_thumbnail.jpg'),
+						path.join(assets_dir, 'fallback_thumb.jpg'),
 						opus_settings,
 						lambda operation, current=None, total=None:
 							callback(operation=operation, track=filename, current=current, total=total),
