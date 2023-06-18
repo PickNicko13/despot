@@ -429,3 +429,13 @@ def upload_release(
 			remove_release_links(release, link_field)
 		else:
 			raise Exception(f'Couldn\'t upload {release_path}.')
+
+def delete_release_from_telegram(release: dict, client: Client, channel: str, id_tag: str):
+	for filetype in ['tracks','images','files']:
+		for filename, file in release[filetype].items():
+			if id_tag in file.keys():
+				result = client.delete_messages(channel, file[id_tag])
+				if isinstance(result,int):
+					file.pop(id_tag)
+				else:
+					raise Exception(f'Could not delete message #{file[id_tag]} ({filename})')
