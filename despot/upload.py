@@ -55,8 +55,8 @@ def format_release_string(release_string: str, release: dict, track_separator: s
 	latin_tracklist = ""
 	# stack up tracklist
 	for track in release["tracks"].values():
-		latin_tracklist += f'\n{track["tracknumber"][0]}{track_separator}\
-				{to_latin.transliterate(track["title"][0])}'
+		latin_tracklist += f'\n{track["tags"]["tracknumber"][0]}{track_separator}\
+				{to_latin.transliterate(track["tags"]["title"][0])}'
 	return release_string.format(**formatting_data, latin_tracklist=latin_tracklist)
 
 # prepare the release artwork according to the telegram rules:
