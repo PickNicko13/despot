@@ -162,6 +162,7 @@ def encode_opus(
 			'-i',	track_path,
 			'-c:a',	'libopus',
 			'-b:a',	f'{bitrate}k',
+			'-f',
 			out_path
 	]
 	if subprocess.run(command).returncode != 0:
@@ -297,7 +298,7 @@ async def send_track(
 	# find best image
 	if track['embedded_image']:
 		extract_embedded_image(path.join(release_path,track_filename), path.join(tmp_dir,'track_thumb.jpg'))
-		prepare_artwork(path.join(tmp_dir,'track_thumb.jpg'),path.join(tmp_dir,'track_thumb.jpg'))
+		prepare_thumbnail(path.join(tmp_dir,'track_thumb.jpg'),path.join(tmp_dir,'track_thumb.jpg'))
 		thumb_file = path.join(tmp_dir,'track_thumb.jpg')
 	elif album_thumbnail:
 		thumb_file = path.join(tmp_dir,'album_thumb.jpg')

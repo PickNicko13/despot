@@ -232,9 +232,7 @@ def find_similar_release(releases: dict, release_src: dict) -> str|None:
 # returns tuple in such form: (deleted_releases, modified_releases, new_scans)
 def update_db(db: dict, trust_mtime: bool = True, callback: Callable = lambda arr: None) -> tuple[list[str],list[str],dict]:
 	# generate fresh release list and get the old one
-	callback({
-			"operation": "generating release list"
-	})
+	callback(operation="generating release list")
 	release_list = gen_release_list(db["root"])
 	old_release_list = db["releases"].keys()
 	# init new lists
@@ -244,16 +242,14 @@ def update_db(db: dict, trust_mtime: bool = True, callback: Callable = lambda ar
 	unmodified_releases = []
 	# detect new and remove unmodified releases from "modified_releases"
 	scanned_releases = 0
-	callback({
-			"operation": "scanning release"
-	})
 	for release in modified_releases:
+		callback(
+				operation="scanning release",
+				release_count=len(modified_releases),
+				scanned_releases=scanned_releases,
+				release=release
+		)
 		if trust_mtime:
-			callback({
-					"release count": len(modified_releases),
-					"scanned releases": scanned_releases,
-					"release": release
-			})
 			files = scan_release(release, mtime_only=True, callback=callback)
 			old_files = dict(
 					(name,{"mtime":data["mtime"]})
@@ -261,11 +257,6 @@ def update_db(db: dict, trust_mtime: bool = True, callback: Callable = lambda ar
 					for name,data in db["releases"][release][filetype].items()
 			)
 		else:
-			callback({
-					"release count": len(modified_releases),
-					"scanned releases": scanned_releases,
-					"release": release
-			})
 			files = scan_release(release, callback=callback)
 			old_files = dict(
 					(name,data)
@@ -288,11 +279,11 @@ def update_db(db: dict, trust_mtime: bool = True, callback: Callable = lambda ar
 	# try finding "new" releases exactly the same as a "deleted" releases
 	delete = {}
 	for release_number, release in enumerate(deleted_releases):
-		callback({
-				"operation": "searching for moved releases",
-				"release count": len(deleted_releases),
-				"scanned releases": release_number-1
-		})
+		callback(
+				operation="searching for moved releases",
+				release_count=len(deleted_releases),
+				scanned_releases=release_number-1
+		)
 		key = find_similar_release(new_scans, db["releases"][release])
 		if key is not None:
 			delete[key] = release
@@ -302,9 +293,7 @@ def update_db(db: dict, trust_mtime: bool = True, callback: Callable = lambda ar
 		new_scans.pop(key)
 		print(f"Moved '{release}' to '{key}'")
 	db["releases"].update(new_scans)
-	callback({
-			"operation": "calculating statistics"
-	})
+	callback(operation="calculating statistics")
 	db["statistics"] = calc_stats(db["releases"])
 	db["update_time"] = time()
 	return deleted_releases, modified_releases, new_scans
