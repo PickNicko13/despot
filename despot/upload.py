@@ -40,7 +40,7 @@ R128_TAGLIST = ( 'r128_track_gain', 'r128_album_gain')
 MP3GAIN_TAGLIST = ( 'mp3gain_minmax', 'mp3gain_album_minmax', 'mp3gain_undo')
 
 # format the user-defined release format string with the appropriate data
-def format_release_string(release_string: str, release: dict, track_separator: str = '. ') -> str:
+def format_release_string(release_string: str, release: dict, link_field: str, track_separator: str = '. ') -> str:
 	# init transliterator
 	to_latin = Transliterator.createInstance("Any-Latin")
 	# init other formatting data (subject to expansion)
@@ -55,8 +55,14 @@ def format_release_string(release_string: str, release: dict, track_separator: s
 	latin_tracklist = ""
 	# stack up tracklist
 	for track in release["tracks"].values():
-		latin_tracklist += f'\n{track["tags"]["tracknumber"][0]}{track_separator}\
-				{to_latin.transliterate(track["tags"]["title"][0])}'
+		entry = track_separator.join([
+				track["tags"]["tracknumber"][0],
+				to_latin.transliterate(track["tags"]["title"][0])
+		])
+		if link_field in track.keys():
+			latin_tracklist += f'\n({track[link_field]})[{entry}]'
+		else:
+			latin_tracklist += f'\n{entry}'
 	return release_string.format(**formatting_data, latin_tracklist=latin_tracklist)
 
 # prepare the release artwork according to the telegram rules:
@@ -386,6 +392,13 @@ async def upload_release(
 					lambda operation, current=None, total=None:
 						callback(operation=operation, track=filename, current=current, total=total),
 			)
+			if '{latin_tracklist' in release_string:
+				msg = await client.edit_message_caption(
+						channel,
+						release[id_field],
+						format_release_string(release_string, release, link_field))
+				if not isinstance(msg, pyrogram.types.Message):
+					raise Exception('Message edit error.', 'Could not update the release message with new info. Message id: {release[id_field]}')
 		remove_release_links(release, link_field)
 	# if release message has not been uploaded yet, send the first message and upload the tracks
 	else:
@@ -405,7 +418,7 @@ async def upload_release(
 		msg = await client.send_photo(
 				channel,
 				path.join(tmp_dir,'album_artwork.jpg'),
-				caption=format_release_string(release_string, release)
+				caption=format_release_string(release_string, release, link_field)
 		)
 		# if release message sent successfully, proceed to sending the tracks
 		if isinstance(msg, pyrogram.types.Message):
