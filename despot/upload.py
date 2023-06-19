@@ -162,7 +162,7 @@ def encode_opus(
 			'-i',	track_path,
 			'-c:a',	'libopus',
 			'-b:a',	f'{bitrate}k',
-			'-f',
+			'-y',
 			out_path
 	]
 	if subprocess.run(command).returncode != 0:
