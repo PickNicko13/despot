@@ -231,7 +231,7 @@ def find_similar_release(releases: dict, release_src: dict) -> str|None:
 		return key[0]
 
 # returns tuple in such form: (deleted_releases, modified_releases, new_scans)
-def update_db(db: dict, trust_mtime: bool = True, callback: Callable = lambda **d: None) -> tuple[dict,dict]:
+def update_db(db: dict, trust_mtime: bool = True, critical_tags: list[str] = [], wanted_tags: list[str] = [], callback: Callable = lambda **d: None) -> tuple[dict,dict]:
 	# generate fresh release list and get the old one
 	callback(operation="generating release list")
 	release_list = gen_release_list(db["root"])
@@ -314,7 +314,7 @@ def update_db(db: dict, trust_mtime: bool = True, callback: Callable = lambda **
 		print(f"Moved '{release}' to '{key}'")
 	db["releases"].update(new_scans)
 	callback(operation="calculating statistics")
-	db["statistics"] = calc_stats(db["releases"])
+	db["statistics"] = calc_stats(db["releases"], critical_tags, wanted_tags)
 	db["update_time"] = time()
 	return deleted_releases, modified_releases
 
