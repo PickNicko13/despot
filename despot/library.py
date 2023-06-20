@@ -1,3 +1,4 @@
+import json
 import mutagen._file
 import mutagen._vorbis
 import mutagen.apev2
@@ -6,15 +7,15 @@ import mutagen.easyid3
 import mutagen.easymp4
 import mutagen.id3
 import mutagen.mp4
+import zstandard
 from PIL import Image
+from copy import deepcopy
+from datetime import datetime
 from natsort import natsorted
 from os import path, scandir, makedirs
-import json
-from wcmatch import wcmatch
-import zstandard
-from datetime import datetime
-from typing import Callable
 from time import time
+from typing import Callable
+from wcmatch import wcmatch
 
 VERSION = '0.1'
 OVERRIDDEN_FILE_EXTENSIONS = ('mid','midi','mov','webp')
@@ -230,7 +231,7 @@ def find_similar_release(releases: dict, release_src: dict) -> str|None:
 		return key[0]
 
 # returns tuple in such form: (deleted_releases, modified_releases, new_scans)
-def update_db(db: dict, trust_mtime: bool = True, callback: Callable = lambda arr: None) -> tuple[list[str],list[str],dict]:
+def update_db(db: dict, trust_mtime: bool = True, callback: Callable = lambda arr: None) -> tuple[dict,dict]:
 	# generate fresh release list and get the old one
 	callback(operation="generating release list")
 	release_list = gen_release_list(db["root"])
@@ -238,14 +239,14 @@ def update_db(db: dict, trust_mtime: bool = True, callback: Callable = lambda ar
 	# init new lists
 	# note that "modified_releases" is more like "either modified or not modified releases"
 	# this list will further be shrunk
-	new_releases, deleted_releases, modified_releases = comm(release_list, old_release_list)
-	unmodified_releases = []
+	potentially_new, potentially_deleted, potentially_modified = comm(release_list, old_release_list)
+	modified_releases = {}
 	# detect new and remove unmodified releases from "modified_releases"
 	scanned_releases = 0
-	for release in modified_releases:
+	for release in potentially_modified:
 		callback(
 				operation="scanning release",
-				release_count=len(modified_releases),
+				release_count=len(potentially_modified),
 				scanned_releases=scanned_releases,
 				release=release
 		)
@@ -266,37 +267,42 @@ def update_db(db: dict, trust_mtime: bool = True, callback: Callable = lambda ar
 		scanned_releases += 1
 		# if file list and corresponding data is the same,
 		# release hasn't changed, so remove it from modified
-		if files == old_files:
-			unmodified_releases.append(release)
-	for release in unmodified_releases:
-		modified_releases.remove(release)
-	del unmodified_releases
+		if files != old_files:
+			modified_releases[release] = deepcopy(db['releases'][release])
+			if trust_mtime:
+				db['releases'][release] = scan_release(release, callback=callback)
+			else:
+				db['releases'][release] = files
 	new_scans = {}
-	for release in new_releases:
-		new_scans[release] = scan_release(release)
-	del new_releases
+	for release in potentially_new:
+		new_scans[release] = scan_release(release, callback=callback)
+	del potentially_new
 	### at this point all the release data is correct and usable
 	# try finding "new" releases exactly the same as a "deleted" releases
-	delete = {}
-	for release_number, release in enumerate(deleted_releases):
+	move = {}
+	deleted_releases = {}
+	for release_number, release in enumerate(potentially_deleted):
 		callback(
 				operation="searching for moved releases",
-				release_count=len(deleted_releases),
+				release_count=len(potentially_deleted),
 				scanned_releases=release_number-1
 		)
 		key = find_similar_release(new_scans, db["releases"][release])
 		if key is not None:
-			delete[key] = release
-	for key,release in delete.items():
+			move[key] = release
+		else:
+			deleted_releases[release] = deepcopy(db['releases'][release])
+	# move releases, moved in library, to their new paths
+	for key,release in move.items():
 		db["releases"][key] = db["releases"].pop(release)
-		deleted_releases.remove(release)
+		potentially_deleted.remove(release)
 		new_scans.pop(key)
 		print(f"Moved '{release}' to '{key}'")
 	db["releases"].update(new_scans)
 	callback(operation="calculating statistics")
 	db["statistics"] = calc_stats(db["releases"])
 	db["update_time"] = time()
-	return deleted_releases, modified_releases, new_scans
+	return deleted_releases, modified_releases
 
 # find a list of tracks lacking tags
 def find_tracks_lacking_tag(releases: dict, tag: str) -> dict[str,list[str]]:
