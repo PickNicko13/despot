@@ -62,7 +62,7 @@ def format_release_string(release_string: str, release: dict, channel_type: Lite
 				to_latin.transliterate(track["tags"]["title"][0])
 		])
 		if link_field in track.keys():
-			latin_tracklist += f'\n({track[link_field]})[{entry}]'
+			latin_tracklist += f'\n[{entry}]({track[link_field]})'
 		else:
 			latin_tracklist += f'\n{entry}'
 	return release_string.format(**formatting_data, latin_tracklist=latin_tracklist)
