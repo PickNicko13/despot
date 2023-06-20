@@ -181,11 +181,11 @@ def scan_release(release_path: str, mtime_only: bool = False, callback: Callable
 				key=lambda x: (x.is_dir(), x.name.lower())
 		):
 		if entry.is_file(follow_symlinks=True):
-			callback({
-					"file": path.join(entry.path, entry.name),
-					"total files": total_files,
-					"scanned files": scanned_files
-			})
+			callback(
+					file =			path.join(entry.path, entry.name),
+					total_files =	total_files,
+					scanned_files =	scanned_files
+			)
 			scanned_files += 1
 			# init the object that will hold entry data representation (tags blob)
 			entry_path = path.join(release_path, entry.name)
@@ -244,21 +244,24 @@ def update_db(db: dict, trust_mtime: bool = True, callback: Callable = lambda ar
 	# detect new and remove unmodified releases from "modified_releases"
 	scanned_releases = 0
 	for release in potentially_modified:
-		callback(
-				operation="scanning release",
-				release_count=len(potentially_modified),
-				scanned_releases=scanned_releases,
-				release=release
+		scan_callback = lambda file,total_files,scanned_files: callback(
+				operation =			"scanning old releases",
+				release_count =		len(potentially_modified),
+				scanned_releases =	scanned_releases,
+				release =			release,
+				file =				file,
+				total_files =		total_files,
+				scanned_files =		scanned_files
 		)
 		if trust_mtime:
-			files = scan_release(release, mtime_only=True, callback=callback)
+			files = scan_release(release, mtime_only=True, callback=scan_callback)
 			old_files = dict(
 					(name,{"mtime":data["mtime"]})
 					for filetype in ("tracks","images","files")
 					for name,data in db["releases"][release][filetype].items()
 			)
 		else:
-			files = scan_release(release, callback=callback)
+			files = scan_release(release, callback=scan_callback)
 			old_files = dict(
 					(name,data)
 					for filetype in ("tracks","images","files")
@@ -270,12 +273,23 @@ def update_db(db: dict, trust_mtime: bool = True, callback: Callable = lambda ar
 		if files != old_files:
 			modified_releases[release] = deepcopy(db['releases'][release])
 			if trust_mtime:
-				db['releases'][release] = scan_release(release, callback=callback)
+				db['releases'][release] = scan_release(release, callback=scan_callback)
 			else:
 				db['releases'][release] = files
+	scanned_releases = 0
 	new_scans = {}
 	for release in potentially_new:
-		new_scans[release] = scan_release(release, callback=callback)
+		scan_callback = lambda file,total_files,scanned_files: callback(
+				operation =			"scanning new releases",
+				release_count =		len(potentially_new),
+				scanned_releases =	scanned_releases,
+				release =			release,
+				file =				file,
+				total_files =		total_files,
+				scanned_files =		scanned_files
+		)
+		new_scans[release] = scan_release(release, callback=scan_callback)
+		scanned_releases += 1
 	del potentially_new
 	### at this point all the release data is correct and usable
 	# try finding "new" releases exactly the same as a "deleted" releases
