@@ -1,10 +1,12 @@
 mutagen
 natsort
-pyrogram
 pillow
+platformdirs
+pyicu
+pyrogram
+pyside6
+r128gain
 tgcrypto
 uvloop
 wcmatch
 zstandard
-pyicu
-platformdirs
