@@ -166,7 +166,7 @@ def gen_release_list(root: str) -> list[str]:
 			).match() ))
 
 # generate a release dict for the given directory
-def scan_release(release_path: str, mtime_only: bool = False, callback: Callable = lambda arr: None) -> dict:
+def scan_release(release_path: str, mtime_only: bool = False, callback: Callable = lambda **d: None) -> dict:
 	release = {} if mtime_only else {
 										"tracks": {},
 										"images": {},
@@ -231,7 +231,7 @@ def find_similar_release(releases: dict, release_src: dict) -> str|None:
 		return key[0]
 
 # returns tuple in such form: (deleted_releases, modified_releases, new_scans)
-def update_db(db: dict, trust_mtime: bool = True, callback: Callable = lambda arr: None) -> tuple[dict,dict]:
+def update_db(db: dict, trust_mtime: bool = True, callback: Callable = lambda **d: None) -> tuple[dict,dict]:
 	# generate fresh release list and get the old one
 	callback(operation="generating release list")
 	release_list = gen_release_list(db["root"])
