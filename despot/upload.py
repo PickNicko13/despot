@@ -440,6 +440,13 @@ async def upload_release(
 						lambda operation, current=None, total=None:
 							callback(operation=operation, track=filename, current=current, total=total),
 				)
+				if '{latin_tracklist' in release_string:
+					msg = await client.edit_message_caption(
+							channel,
+							release[id_field],
+							format_release_string(release_string, release, short_type))
+					if not isinstance(msg, pyrogram.types.Message):
+						raise Exception('Message edit error.', 'Could not update the release message with new info. Message id: {release[id_field]}')
 				callback(operation='Track sent successfully', track=filename)
 			# after finishing the full release upload, clean up the links
 			remove_release_links(release, link_field)
