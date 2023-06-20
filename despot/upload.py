@@ -1,3 +1,4 @@
+from typing import Literal
 from library import *
 import os.path
 from icu._icu_ import Transliterator
@@ -40,7 +41,8 @@ R128_TAGLIST = ( 'r128_track_gain', 'r128_album_gain')
 MP3GAIN_TAGLIST = ( 'mp3gain_minmax', 'mp3gain_album_minmax', 'mp3gain_undo')
 
 # format the user-defined release format string with the appropriate data
-def format_release_string(release_string: str, release: dict, link_field: str, track_separator: str = '. ') -> str:
+def format_release_string(release_string: str, release: dict, channel_type: Literal['opus','orig'], track_separator: str = '. ') -> str:
+	link_field = 'link_'+channel_type
 	# init transliterator
 	to_latin = Transliterator.createInstance("Any-Latin")
 	# init other formatting data (subject to expansion)
@@ -396,7 +398,7 @@ async def upload_release(
 				msg = await client.edit_message_caption(
 						channel,
 						release[id_field],
-						format_release_string(release_string, release, link_field))
+						format_release_string(release_string, release, short_type))
 				if not isinstance(msg, pyrogram.types.Message):
 					raise Exception('Message edit error.', 'Could not update the release message with new info. Message id: {release[id_field]}')
 		remove_release_links(release, link_field)
@@ -418,7 +420,7 @@ async def upload_release(
 		msg = await client.send_photo(
 				channel,
 				path.join(tmp_dir,'album_artwork.jpg'),
-				caption=format_release_string(release_string, release, link_field)
+				caption=format_release_string(release_string, release, short_type)
 		)
 		# if release message sent successfully, proceed to sending the tracks
 		if isinstance(msg, pyrogram.types.Message):
@@ -444,12 +446,19 @@ async def upload_release(
 		else:
 			raise Exception(f'Couldn\'t upload {release_path}.')
 
-async def delete_release_from_telegram(release: dict, client: Client, channel: str, id_tag: str):
+# delete message if id is present in the given dict
+async def safe_delete_message(client: Client, channel: str, name: str, id_field: str, file: dict):
+	if id_field in file.keys():
+		result = await client.delete_messages(channel, file[id_field])
+		if isinstance(result,int):
+			file.pop(id_field)
+		else:
+			raise Exception(f'Could not delete message #{file[id_field]} ({name})')
+
+# delete a whole release based on the database dict
+async def delete_release_from_telegram(release: dict, client: Client, channel: str, channel_type: Literal['orig','opus']):
+	id_field = 'id_'+channel_type
 	for filetype in ['tracks','images','files']:
 		for filename, file in release[filetype].items():
-			if id_tag in file.keys():
-				result = await client.delete_messages(channel, file[id_tag])
-				if isinstance(result,int):
-					file.pop(id_tag)
-				else:
-					raise Exception(f'Could not delete message #{file[id_tag]} ({filename})')
+			await safe_delete_message(client, channel, filename, id_field, file)
+		await safe_delete_message(client, channel, 'release', id_field, release)
