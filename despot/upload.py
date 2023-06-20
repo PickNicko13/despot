@@ -321,7 +321,7 @@ async def send_track(
 				bitrate=opus_settings['bitrate'],
 				rg_mode=opus_settings['replaygain']['mode'],
 				rg_clip=opus_settings['replaygain']['clipping_policy'],
-				artwork=thumb_file
+				artwork=thumb_file if opus_settings['embed_cover'] else None
 		)
 		track_path = path.join(tmp_dir,'track.opus')
 	# send track
