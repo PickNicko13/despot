@@ -182,7 +182,7 @@ def scan_release(release_path: str, mtime_only: bool = False, callback: Callable
 		):
 		if entry.is_file(follow_symlinks=True):
 			callback(
-					file =			path.join(entry.path, entry.name),
+					file =			entry.name,
 					total_files =	total_files,
 					scanned_files =	scanned_files
 			)
@@ -359,7 +359,7 @@ def find_multi_tag_releases(releases: dict, tag: str) -> list[str]:
 # calculate compensated peak based on peak and gain tag strings
 def calc_compensated_peak(peak: float, gain_db: str) -> float:
 	db = float( gain_db.lower().removesuffix('db').removesuffix('lufs') )
-	if db != float('inf'):
+	if db == float('inf'):
 		return 0.
 	else:
 		return peak * db_gain(db)

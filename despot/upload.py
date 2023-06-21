@@ -327,7 +327,7 @@ async def send_track(
 	# send track
 	msg = await client.send_audio(
 			channel,
-			path.join(release_path,track_filename),
+			track_path,
 			duration=int(track['length']),
 			performer=' | '.join(track['tags']['artist']),
 			title=track['tags']['title'][0],
@@ -371,7 +371,7 @@ async def upload_release(
 	callback(operation="Preparing release images")
 	# detect best image
 	if len(release['images']) > 0:
-		best_image = Image.open(get_best_artwork(release['images'], preferred_names, preferred_exts))
+		best_image = Image.open(path.join(release_path, get_best_artwork(release['images'], preferred_names, preferred_exts)))
 		album_thumbnail = True
 		prepare_thumbnail(best_image, path.join(tmp_dir,'album_thumb.jpg'))
 	else:
