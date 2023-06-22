@@ -402,7 +402,8 @@ def calc_stats(releases: dict,
 			"rate": {},
 			"lacking_tags": {
 				"critical": 0,
-				"wanted": 0
+				"wanted": 0,
+				"both": 0
 			},
 			"artwork": {
 				"embedded": 0,
@@ -462,19 +463,28 @@ def calc_stats(releases: dict,
 			else:
 				statistics["track_counts"]["rate"][track["rate"]] = 1
 			# classify track by lacking tags
-			if any( data not in tags.keys() for data in critical_tags ):
-				statistics["track_counts"]["lacking_tags"]["critical"] += 1
-			if any( data not in tags.keys() for data in wanted_tags ):
-				statistics["track_counts"]["lacking_tags"]["wanted"] += 1
+			missing_critical = any( data not in tags.keys() for data in critical_tags )
+			missing_wanted = any( data not in tags.keys() for data in wanted_tags )
+			statistics["track_counts"]["lacking_tags"]["critical"]	+= missing_critical
+			statistics["track_counts"]["lacking_tags"]["wanted"]	+= missing_wanted
+			statistics["track_counts"]["lacking_tags"]["both"]		+= missing_wanted and missing_critical
 			# classify tracks by the presence of artworks
 			embedded = track["embedded_image"]
-			external = hasattr(release,"images")
+			external = "images" in release
 			statistics["track_counts"]["artwork"]["embedded"]	+= embedded
 			statistics["track_counts"]["artwork"]["external"]	+= external
 			statistics["track_counts"]["artwork"]["both"]		+= embedded and external
 	# convert depth and rate keys to str
 	statistics["track_counts"]["depth"] = {str(k):v for k,v in statistics["track_counts"]["depth"].items()}
 	statistics["track_counts"]["rate"] = {str(k):v for k,v in statistics["track_counts"]["rate"].items()}
+
+	# at this point, "embedded" has the count of all tracks with embedded images,
+	# but it would be more useful if it only counted the ones ONLY with embedded images, but not with both.
+	# So, here's a simple solution
+	statistics["track_counts"]["lacking_tags"]["critical"] -= statistics["track_counts"]["lacking_tags"]["both"]
+	statistics["track_counts"]["lacking_tags"]["wanted"] -= statistics["track_counts"]["lacking_tags"]["both"]
+	statistics["track_counts"]["artwork"]["embedded"] -= statistics["track_counts"]["artwork"]["both"]
+	statistics["track_counts"]["artwork"]["external"] -= statistics["track_counts"]["artwork"]["both"]
 
 	return statistics
 

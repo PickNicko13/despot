@@ -13,6 +13,7 @@ from mutagen.flac import Picture
 from math import log10
 from base64 import b64encode, b64decode
 from pyrogram.client import Client
+from PIL import Image
 import pyrogram.types
 
 # images are saved as jpegs with quality 77
@@ -71,7 +72,7 @@ def format_release_string(release_string: str, release: dict, channel_type: Lite
 # height and width <= 2560px
 # size <= 10M
 # either PNG or JPEG
-def prepare_artwork(img, path):
+def prepare_artwork(img: Image.Image, path: str):
 	if( os.path.getsize(img.filename)/1024/1024 > 10 or
 			img.height > 2560 or img.width > 2560 or
 			img.format not in ('PNG', 'JPEG') ):
@@ -83,7 +84,7 @@ def prepare_artwork(img, path):
 # prepare the thumbnail for the file according to the telegram rules:
 # height and width <= 320px
 # size <= 200K
-def prepare_thumbnail(img, path):
+def prepare_thumbnail(img: Image.Image, path):
 	divider = img.width/320 if img.width < img.height else img.height/320
 	img = img.resize(( int(img.width//divider), int(img.height//divider) ))
 	img = img.convert('RGB')
@@ -412,7 +413,7 @@ async def upload_release(
 			for filename,track in release['tracks'].items():
 				if track['embedded_image']:
 					extract_embedded_image(path.join(release_path,filename), path.join(tmp_dir,'album_artwork.jpg'))
-					prepare_artwork(path.join(tmp_dir,'album_artwork.jpg'), path.join(tmp_dir,'album_artwork.jpg'))
+					prepare_artwork(Image.open(path.join(tmp_dir,'album_artwork.jpg')), path.join(tmp_dir,'album_artwork.jpg'))
 					break
 		else:
 			copyfile(path.join(assets_dir,'fallback_artwork.jpg'), path.join(tmp_dir,'album_artwork.jpg'))
